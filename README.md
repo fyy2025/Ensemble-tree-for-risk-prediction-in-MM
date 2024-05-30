@@ -15,3 +15,7 @@ The `real_data_experiment.Rmd` file shows an example of training the ensemble tr
 - The cIndex() function from the Intsurv package is used to compute the concordence index of our tree-based models.
 
 - The constrOptim.nl() function from the Alabama package is used to find the optimal ensemble weights for the ensemble tree-like model.
+
+## Implementation of risk prediction models
+
+The folder includes Rmd files implementing risk prediction models (EMC-92, UAMS-70) using gene expression levels to predict risk of MM patients using the MMRF data. Gene expression level data and patient survival data of the MMRF study was used. Brainarray platform and biomaRt package were used to convert probe set IDs to gene ensembl IDs.
