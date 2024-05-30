@@ -19,3 +19,5 @@ The `real_data_experiment.Rmd` file shows an example of training the ensemble tr
 ## Implementation of risk prediction models
 
 The folder includes Rmd files implementing risk prediction models (EMC-92, UAMS-70) using gene expression levels to predict risk of MM patients using the MMRF data. Gene expression level data and patient survival data of the MMRF study was used. Brainarray platform and biomaRt package were used to convert probe set IDs to gene ensembl IDs.
+
+The brainarray file can be downloaded at http://brainarray.mbni.med.umich.edu/Brainarray/Database/CustomCDF/25.0.0/ensg.asp.
