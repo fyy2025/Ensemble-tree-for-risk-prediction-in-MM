@@ -146,9 +146,16 @@ MMRF_Survival$risk=ifelse(MMRF_Survival$PUBLIC_ID %in% high_risk, 1, 0) #risk=1 
 library(survival)
 library(ggfortify)
 PFS_fit=survfit(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
-autoplot(PFS_fit,main="Survival of different risk groups categorized by EMC-92")
+autoplot(PFS_fit,main="PFS of different risk groups categorized by EMC-92")
 ```
 ```{r}
 survdiff(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
 ```
 
+```{r}
+OS_fit=survfit(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
+autoplot(OS_fit,main="OS of different risk groups categorized by EMC-92")
+```
+```{r}
+survdiff(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
+```
