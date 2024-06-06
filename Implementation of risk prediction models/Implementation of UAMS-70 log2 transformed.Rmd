@@ -1,5 +1,5 @@
 ---
-title: "Implementation of EMC-92"
+title: "Implementation of UAMS-70"
 output: html_document
 ---
 
@@ -13,17 +13,15 @@ This is an R Markdown document. Markdown is a simple formatting syntax for autho
 
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
-
-Get the probe set IDs and weights in the EMC-92 model
+Get the probe set IDs and weights in the UAMS-70 model
 ```{r}
 library(geneClassifiers)
-EMC92Classifier<-getClassifier("EMC92")
-EMC92Classifier
-weights=getWeights(EMC92Classifier)
+UAMS70Classifier<-getClassifier("UAMS70")
+UAMS70Classifier
+weights=getWeights(UAMS70Classifier)
 weights
 probeset_id=names(weights)
 ```
-
 BioMart mapping
 ```{r}
 library(biomaRt) 
@@ -45,8 +43,11 @@ tidydata=t(TPM_first_EMC)%>%
   row_to_names(row_number=1)
 patient=row.names(tidydata)
 tidydata=as.data.frame(tidydata)
-tidydata=sapply(tidydata,as.numeric )
-scaled_data=scale(tidydata)
+log2_transform <- function(x) {
+  log2(x + 1)
+}
+tidydata=as.data.frame(sapply(tidydata,as.numeric,2))
+scaled_data=as.data.frame(sapply(tidydata,log2_transform))
 ```
 
 ```{r}
@@ -114,7 +115,7 @@ data.frame(revised_probeset,revised_ensembl, unname(revised_weight))
 length(unique(revised_probeset))
 length(unique(revised_weight))
 ```
-Calculate the revised risk score, higher score represents higher risk
+Calculated the revised risk score, higher score represents higher risk
 ```{r}
 score=rep(0,nrow(scaled_data))
 for (i in 1:length(revised_weight)){
@@ -122,8 +123,9 @@ for (i in 1:length(revised_weight)){
 }
 ```
 
+80% as cutoff
 ```{r}
-cutoff=quantile(score,0.8)
+cutoff=1.618
 high_risk=patient[score>=cutoff]
 low_risk=patient[score<cutoff]
 ```
@@ -146,7 +148,7 @@ MMRF_Survival$risk=ifelse(MMRF_Survival$PUBLIC_ID %in% high_risk, 1, 0) #risk=1 
 library(survival)
 library(ggfortify)
 PFS_fit=survfit(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
-autoplot(PFS_fit,main="PFS of different risk groups categorized by EMC-92")
+autoplot(PFS_fit,main="PFS of different risk groups categorized by UAMS-70")
 ```
 ```{r}
 survdiff(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
@@ -154,15 +156,15 @@ survdiff(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
 
 ```{r}
 OS_fit=survfit(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
-autoplot(OS_fit,main="OS of different risk groups categorized by EMC-92")
-```
-```{r}
-survdiff(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
+autoplot(OS_fit,main="OS of different risk groups categorized by UAMS-70")
 ```
 
 ```{r}
-EMC_score=data.frame(score)
-EMC_score$patient=gsub(pattern = "_1_BM_CD138pos",replacement = "",x = patient)
-write.csv(EMC_score,"EMC_score.csv",row.names=F)
+survdiff(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
+```
+```{r}
+UAMS_score=data.frame(score)
+UAMS_score$patient=gsub(pattern = "_1_BM_CD138pos",replacement = "",x = patient)
+write.csv(UAMS_score,"UAMS_score.csv",row.names = F)
 ```
 
