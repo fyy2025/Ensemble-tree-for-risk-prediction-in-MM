@@ -36,4 +36,4 @@ The folder contains csv files for respective risk scores obtained from risk pred
 
 The folder contains exploration on methods to develop an optimal tree to begin the ensemble with.
 
-- The `SurTree.Rmd` file runs 500 bootstapping simulations to explore performance of ensemble model on optimal survival trees (using STreeD package in python). STreeD is developed in python, the `SurTree Implementation.py` calls the function in python.
+- The `SurTree.Rmd` file runs 500 bootstapping simulations to explore performance of ensemble model on optimal survival trees (using STreeD package in python). STreeD is developed in python (https://github.com/AlgTUDelft/pystreed), the `SurTree Implementation.py` calls the function in python.
