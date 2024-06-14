@@ -21,3 +21,19 @@ The `real_data_experiment.Rmd` file shows an example of training the ensemble tr
 The folder includes Rmd files implementing risk prediction models (EMC-92, UAMS-70) using gene expression levels to predict risk of MM patients using the MMRF data. Gene expression level data and patient survival data of the MMRF study was used. Brainarray platform and biomaRt package were used to convert probe set IDs to gene ensembl IDs.
 
 The brainarray file can be downloaded at http://brainarray.mbni.med.umich.edu/Brainarray/Database/CustomCDF/25.0.0/ensg.asp.
+
+## Ensemble tree with risk prediction scores
+
+The folder contains csv files for respective risk scores obtained from risk prediction models.
+
+- The `risk score data experiment.Rmd` file contains example code for applying ensemble method on the data frame containing risk scores and survival outcome.
+
+- The `risk score data experiment bootstrap.Rmd` file runs 500 bootstapping simulations to compare model performance on different datasets (continuous score and binary class).
+
+- The `risk score data experiment with pruning.Rmd` file runs 500 bootstapping simulations to explore performance of ensemble model on pruned trees (using rpart package).
+
+## Optimal initial tree
+
+The folder contains exploration on methods to develop an optimal tree to begin the ensemble with.
+
+- The `SurTree.Rmd` file runs 500 bootstapping simulations to explore performance of ensemble model on optimal survival trees (using STreeD package in python). STreeD is developed in python, the `SurTree Implementation.py` calls the function in python.
