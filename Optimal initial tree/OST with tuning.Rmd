@@ -96,7 +96,7 @@ for (seed in 1:500){
           missingdatamode = "separate_class",
           minbucket = 40,
       ),
-      max_depth = 4
+      max_depth = 1:4
   )
   iai::fit(grid, X, y$status==1, y$time,
            validation_criterion = "harrell_c_statistic")
@@ -525,7 +525,7 @@ for (seed in 1:500){
           missingdatamode = "separate_class",
           minbucket = 40,
       ),
-      max_depth = 4
+      max_depth = 1:4
   )
   iai::fit(grid, X, y$status==1, y$time,
            validation_criterion = "harrell_c_statistic")
