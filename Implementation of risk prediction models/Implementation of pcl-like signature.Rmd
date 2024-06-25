@@ -1,0 +1,99 @@
+---
+title: "Implementation of PCL-like signature"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+BioMart mapping
+```{r}
+library(biomaRt) 
+mart <- useMart('ENSEMBL_MART_ENSEMBL')
+mart <- useDataset('hsapiens_gene_ensembl', mart)
+
+annotLookup <- getBM(
+  mart = mart,
+  attributes = c(
+    'hgnc_symbol',
+    'ensembl_gene_id',
+    'gene_biotype'),
+  uniqueRows = TRUE)
+```
+
+```{r}
+library(readr)
+dict=read.csv("./PCL\ signature\ dict.csv")
+
+```
+
+
+Read the MMRF TPM data and standardize the expression levels
+```{r}
+library(readr)
+library(tidyr)
+library(dplyr)
+library(janitor)
+MMRF_TPM=read_tsv("/Users/fanyiyang/Desktop/Research/summer/Implementation\ of\ risk\ models/MMRF_TPM.tsv")
+TPM_first_visit <- MMRF_TPM %>% dplyr::select("Gene",ends_with("_1_BM_CD138pos"))
+TPM_first_GPI = subset(TPM_first_visit,Gene %in% dict$Ensembl.Gene.ID)
+
+tidydata=t(TPM_first_GPI)%>%
+  row_to_names(row_number=1)
+patient=row.names(tidydata)
+tidydata=as.data.frame(tidydata)
+tidydata=as.data.frame(sapply(tidydata,as.numeric ))
+scaled_data=as.data.frame(scale(tidydata))
+public_id=gsub(pattern = "_1_BM_CD138pos",replacement = "",x = patient)
+```
+
+Calculated the revised risk score, higher score represents higher risk
+```{r}
+score=rep(0,nrow(scaled_data))
+for (i in 1:ncol(scaled_data)){
+  score=score+scaled_data[,i]*dict$Weight[which(dict$Ensembl.Gene.ID==colnames(scaled_data)[i])]
+}
+```
+
+```{r}
+cutoff=3.55
+high_risk=public_id[score>=cutoff]
+low_risk=public_id[score<cutoff]
+```
+
+
+```{r}
+MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL=read_tsv("./MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL.tsv")
+MMRF_Survival=subset(MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL,PUBLIC_ID %in% high_risk | PUBLIC_ID %in% low_risk)
+MMRF_Survival$risk=ifelse(MMRF_Survival$PUBLIC_ID %in% high_risk, 1, 0) #risk=1 represents high risk
+```
+
+```{r}
+library(survival)
+library(ggfortify)
+OS_fit=survfit(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
+autoplot(OS_fit,main="OS of different risk groups categorized by proliferation index")
+```
+```{r}
+survdiff(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
+```
+
+
+```{r}
+PFS_fit=survfit(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
+autoplot(PFS_fit,main="PFS of different risk groups categorized by proliferation index")
+survdiff(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
+```
+```{r}
+GPI_score=data.frame(score)
+GPI_score$patient=gsub(pattern = "_1_BM_CD138pos",replacement = "",x = patient)
+write.csv(GPI_score,"PCL_score.csv",row.names = F)
+```

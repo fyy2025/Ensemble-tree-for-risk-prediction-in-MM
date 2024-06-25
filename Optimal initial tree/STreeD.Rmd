@@ -124,7 +124,7 @@ tau=max(merged_data$time)
 
 train_py <- r_to_py(train)
 
-source_python("./Tuned\ STreeD.py")
+source_python("./STreeD.py")
 
 model=fit(r_to_py(train))
 
@@ -167,7 +167,7 @@ for (seed in 1:500){
   
   train_py <- r_to_py(train)
   
-  source_python("./Tuned\ STreeD.py")
+  source_python("./STreeD.py")
   
   model=fit(r_to_py(train))
   
@@ -609,12 +609,12 @@ find_terminal_node <- function(treeinfo,node, observation) {
 ```
 
 ```{r}
-streed_super_loss01=rep(0,500)
-streed_initial_loss01=rep(0,500)
-forest_loss01=rep(0,500)
-num_leaves01=rep(0,500)
+streed_super_loss01=rep(0,50)
+streed_initial_loss01=rep(0,50)
+forest_loss01=rep(0,50)
+num_leaves01=rep(0,50)
 
-for (seed in 1:500){
+for (seed in 2:2){
   set.seed(seed)
   train_index = sample(nrow(merged_data), 400, replace = F)
   train = merged_data01[train_index,]
@@ -626,7 +626,7 @@ for (seed in 1:500){
   
   train_py <- r_to_py(train)
   
-  source_python("./Tuned\ STreeD.py")
+  source_python("./STreeD.py")
   
   model=fit(r_to_py(train))
   
@@ -1048,7 +1048,7 @@ par(cex.axis=0.8, mar=c(7, 10, 5, 1))
 boxplot(cbind(summary[3:6],summary2,prune_summary[1:4]),beside=T,horizontal=T,las=1,xlab="C index")
 ```
 
-now is tuned and pruned
+
 ```{r}
 overall_summary=cbind(summary[3:6],summary2,prune_summary[1:4])
 streed_initial_ratio=overall_summary$streed_initial_loss/overall_summary$initial_loss

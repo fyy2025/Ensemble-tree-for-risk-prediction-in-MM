@@ -1,5 +1,5 @@
 ---
-title: "SurTree"
+title: "real data analysis experiment"
 output: html_document
 ---
 
@@ -13,6 +13,20 @@ This is an R Markdown document. Markdown is a simple formatting syntax for autho
 
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
 ```{r}
 library(intsurv)
 library(survminer)
@@ -24,140 +38,90 @@ library(alabama)
 library(dplyr)
 library(rpart)
 library(treeClust)
-Sys.unsetenv("RETICULATE_PYTHON")
-library(reticulate)
-library(rmarkdown)
-use_python("/usr/local/bin/python3")
-```
-```{r}
-merged_data=read_csv("./merge\ data\ continuous.csv")
-merged_data01=read_csv("./merge\ data\ binary.csv")
 ```
 
 ```{r}
-index_tree <- function(node) {
-  # Initialize the index counter
-  index <- 0
-  
-  # Initialize a list to store the nodes by their index
-  node_list <- list()
-  
-  # Initialize a data frame to store the parent-child relationships
-  edge_list <- data.frame(parent = integer(), left_child = integer(), right_child = integer(), stringsAsFactors = FALSE)
-  
-  # Helper function to recursively index nodes and store relationships
-  index_node <- function(node) {
-    if (is.null(node)) {
-      return(NULL)
-    }
-    
-    # Increment the index for the current node
-    index <<- index + 1
-    
-    # Store the current index for this node
-    current_index <- index
-    
-    # Add the node to the list with its index
-    node_list[[as.character(current_index)]] <- node
-    
-    # Initialize left and right child indices as NA
-    left_index <- NA
-    right_index <- NA
-    
-    # Process the left child if it exists
-    if (!is.null(node$left_child)) {
-      left_index <- index_node(node$left_child)
-    }
-    
-    # Process the right child if it exists
-    if (!is.null(node$right_child)) {
-      right_index <- index_node(node$right_child)
-    }
-    
-    # Add the relationship to the edge list
-    edge_list <<- rbind(edge_list, data.frame(parent = current_index, left_child = left_index, right_child = right_index))
-    
-    # Return the current index
-    return(current_index)
-  }
-  
-  # Start indexing from the root node
-  index_node(node)
-  
-  # Return the indexed nodes and relationships
-  list(edge_list = edge_list)
-}
-
-find_terminal_node <- function(treeinfo,node, observation) {
-  # Recursively traverse the tree until a leaf node is reached
-  index=1
-  while (node$is_branching_node()) {
-    # Check the split variable and split value
-    feature_index=node$feature
-    feature_description=feature[feature_index+1]
-    split_str=strsplit(feature_description," ")[[1]]
-    split_var <- colnames(train)[as.numeric(split_str[2])]
-    split_val <- as.numeric(split_str[length(split_str)])
-    
-    # Determine the next node based on the split
-    if (observation[[split_var]] > split_val) {
-      node <- node$left_child
-      index=tree_info$left_child[which(tree_info$parent==index)]
-    } else {
-      node <- node$right_child
-      index=tree_info$right_child[which(tree_info$parent==index)]
-    }
-  }
-  
-  # Return the index of the leaf node
-  return(index)
-}
+EMC_score=read.csv("./EMC_score.csv")
+EI_score=read.csv("./EI_OS_score.csv")
+UAMS_score=read.csv("./UAMS_score.csv")
+GPI_score=read.csv("./GPI_score.csv")
 ```
 
+```{r}
+merged=merge(EMC_score,EI_score,by="patient")%>%
+  rename(EMC=score,EI=OS_score)%>%
+  merge(UAMS_score,by="patient")%>%
+  rename(UAMS=score)%>%
+  merge(GPI_score,by="patient")%>%
+  rename(GPI=score)
+```
+
+```{r}
+merged$EMC=ifelse(merged$EMC>quantile(merged$EMC,0.8),1,0)
+merged$UAMS=ifelse(merged$UAMS>quantile(merged$UAMS,0.8),1,0)
+merged$GPI=ifelse(merged$GPI>quantile(merged$GPI,0.8),1,0)
+merged$EI=ifelse(merged$EI>=quantile(merged$EI,0.8),1,0)
+```
+
+```{r}
+library(dplyr)
+MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL=read_tsv("./MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL.tsv")%>%
+  dplyr::select("ttcos","censos","PUBLIC_ID")%>%
+  rename(patient=PUBLIC_ID,time=ttcos,status=censos)
+```
+```{r}
+merged_data01=merge(merged,MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL,by="patient")
+patient_ID=merged_data01$patient
+merged_data01=merged_data01[,-1]
+```
+
+```{r}
+merged=merge(EMC_score,EI_score,by="patient")%>%
+  rename(EMC=score,EI=OS_score)%>%
+  merge(UAMS_score,by="patient")%>%
+  rename(UAMS=score)%>%
+  merge(GPI_score,by="patient")%>%
+  rename(GPI=score)
+```
+
+```{r}
+merged_data=merge(merged,MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL,by="patient")
+patient_ID=merged_data$patient
+merged_data=merged_data[,-1]
+```
+
+* Draw the histogram to decide the cut-off point
+* Nelson Aalen estimator might make biased prediction at tails
 ```{r}
 set.seed(1)
-train_index = sample(nrow(merged_data), 400, replace = F)
-train = merged_data[train_index,]
-test = merged_data[-train_index,]
+index = sample(nrow(merged), 400, replace = F)
+train = merged_data[index,]
+test = merged_data[-index,]
+hist(merged_data$time)
 tau=max(merged_data$time)
-
-
-train_py <- r_to_py(train)
-
-source_python("./Tuned\ STreeD.py")
-
-model=fit(r_to_py(train))
-
-feature_list=model$binarizer_$continuous_binarizer$column_names_
-num_feature=length(feature_list)*model$n_thresholds
-feature=c()
-for (i in 1:length(feature_list)){
-  for (j in 1:length(feature_list[[i]])){
-    feature=c(feature,feature_list[[i]][j])
-  }
-}
-
-
-tree_info=index_tree(model$tree_)[[1]]
-
-
-group=rep(0,dim(merged_data)[1])
-for (i in 1:length(group)){
-  group[i]=find_terminal_node(tree_info,model$tree_,merged_data[i,])
-}
-table(group)
-
+```
+```{r}
+# library(rpart)
+# library(party)
+# index = sample(nrow(merged_data01), 400, replace = F)
+# train = merged_data01[index,]
+# model_prune=rpart(Surv(time, status) ~ .,data=train)
+# model_conditioned=ctree(Surv(time, status) ~ .,data=train)
 ```
 
+
+
 ```{r}
-streed_initial_loss=rep(0,500)
-streed_super_loss=rep(0,500)
+prune_initial_loss=rep(0,500)
+prune_super_loss=rep(0,500)
 forest_loss=rep(0,500)
-num_leaves=rep(0,500)
+prune_initial_loss01=rep(0,500)
+prune_super_loss01=rep(0,500)
+forest_loss01=rep(0,500)
 
 for (seed in 1:500){
   set.seed(seed)
-  train_index = sample(nrow(merged_data), 400, replace = F)
+  train_index = sample(nrow(merged), 400, replace = F)
   train = merged_data[train_index,]
   test = merged_data[-train_index,]
   tau=max(merged_data$time)
@@ -165,36 +129,31 @@ for (seed in 1:500){
   structure=TRUE
   model1=ranger(Surv(time, status) ~ .,data=train,num.tree=500,mtry=ncol(train)-2,splitrule = "logrank", min.node.size = 5)
   
-  train_py <- r_to_py(train)
+  set.seed(109) 
+  # seed 109, num_leaf=4, min leaf size=13
+  # seed 7305, min leaf size=11
   
-  source_python("./Tuned\ STreeD.py")
-  
-  model=fit(r_to_py(train))
-  
-  feature_list=model$binarizer_$continuous_binarizer$column_names_
-  num_feature=length(feature_list)*model$n_thresholds
-  feature=c()
-  for (i in 1:length(feature_list)){
-    for (j in 1:length(feature_list[[i]])){
-      feature=c(feature,feature_list[[i]][j])
-    }
+  # Fit single survival tree to get initial leaf allocation
+  model_prune=rpart(Surv(time, status) ~ .,data=train)
+  terminal_nodes <- which(model_prune$frame$var == "<leaf>")
+  f= function(node) {
+    # Extract the subset of data corresponding to the leaf node
+    node_data <- train[model_prune$where == as.numeric(node), ]
+    
+    # Fit a survival model to the data in the node
+    node_fit <- survfit(Surv(time, status) ~ 1, data = node_data)
+    
+    # Extract the cumulative hazard function
+    chf <- cumsum(node_fit$n.event / node_fit$n.risk)
+    data.frame(time = node_fit$time, chf = chf)
   }
+  chf_list=lapply(terminal_nodes,f)
   
-  
-  tree_info=index_tree(model$tree_)[[1]]
-  
-  
-  group=rep(0,dim(train)[1])
-  for (i in 1:length(group)){
-    group[i]=find_terminal_node(tree_info,model$tree_,train[i,])
-  }
-  
-  terminal_nodes=as.numeric(names(table(group)))
-  
+  group=rep(0,nrow(train))
   for (i in 1:nrow(train)){
-    group[i]=which(terminal_nodes==group[i])
+    group[i]=which(terminal_nodes==model_prune$where[i])
   }
-  
+  group=unname(group)
   chf_value_dict=list() # a list of lists of chf values
   time_dict=list() # a list of lists of time points
   # We now make sure every leaf has at least 2 observations, otherwise the tree structure might not pertain in 10-fold cross validation. For leaves with 1 or 2 observations, we randomly combine this leaf with another leaf.
@@ -202,7 +161,7 @@ for (seed in 1:500){
   single_leaf=as.vector(which(leaf_size<=2))
   normal_leaf=as.vector(which(leaf_size>2))
   
-  reassign_dict=as.vector(1:sum(is.na(tree_info$left_child)))
+  reassign_dict=as.vector(1:length(terminal_nodes))
   for (i in 1:length(single_leaf)){
     new_assignment=sample(normal_leaf,1)
     group[which(group==single_leaf[i])]=new_assignment
@@ -215,7 +174,7 @@ for (seed in 1:500){
   for (i in 1:length(group)){
     group[i]=which(loose_group==group[i])
   }
-  for (i in 1:length(reassign_dict)){
+  for (i in 1:length(terminal_nodes)){
     reassign_dict[i]=which(loose_group==reassign_dict[i])
   }
   
@@ -223,15 +182,6 @@ for (seed in 1:500){
   
   # keep the first group allocation for CV
   first_group=group
-  
-  # save the chf for initial tree on full train data
-  chf_list=list()
-  time_list=list()
-  train_group=cbind(train,group)
-  for (i in 1:num_leaf){
-    chf_list[[i]]=survfit(Surv(time,status)~1, type = "fleming-harrington",data=subset(train_group,group==i))$cumhaz
-    time_list[[i]]=survfit(Surv(time,status)~1, type = "fleming-harrington",data=subset(train_group,group==i))$time
-  }
   
   # 10-fold cross validation
   if (min(table(group))>=2){ # condition automatically fulfilled from the recombining step
@@ -424,7 +374,7 @@ for (seed in 1:500){
   # chf_time=predict2$unique.death.times
   # chf_value=predict2$chf
   # chf_value_dict=list()
-  # for (i in 1:length(num_leaf)){
+  # for (i in 1:length(terminal_nodes)){
   #   chf_value_dict[[i]]=list(chf_list[[i]]$chf)
   #   time_dict[[i]]=list(chf_list[[i]]$time)
   # }
@@ -446,9 +396,13 @@ for (seed in 1:500){
   group=first_group
   chf=list()
   time=list()
+  for (i in 1:length(terminal_nodes)){
+    chf[[i]]=chf_list[[i]]$chf
+    time[[i]]=chf_list[[i]]$time
+  }
   
-  chf_value_dict=list(chf_list)
-  time_dict=list(time_list)
+  chf_value_dict=list(chf)
+  time_dict=list(time)
   
   test_risk_score=list()
   for (i in 1:num_leaf){
@@ -517,12 +471,8 @@ for (seed in 1:500){
   # test_predict=predict(model2, data=test)
   # chf_predict=test_predict$chf
   # test_group=rep(NA,nrow(test))
-  
-  test_group=rep(0,dim(test)[1])
-  for (i in 1:length(test_group)){
-    test_group[i]=find_terminal_node(tree_info,model$tree_,test[i,])
-  }
-  
+  test_group=rpart.predict.leaves(model_prune, test, type = "where")
+  test_group=unname(test_group)
   for (i in 1:nrow(test)){
     test_group[i]=reassign_dict[which(terminal_nodes==test_group[i])]
   }
@@ -559,8 +509,8 @@ for (seed in 1:500){
     result=result+parameter[i]*test_risk_score[[i]] # calculating the ensemble risk score
   }
   
-  streed_super_loss[seed]=cIndex(test$time,test$status,as.vector(result))[1]
-  streed_initial_loss[seed]=test_c_index[1]
+  prune_super_loss[seed]=cIndex(test$time,test$status,as.vector(result))[1]
+  prune_initial_loss[seed]=test_c_index[1]
   
   test_predict=predict(model1, data=test)
   chf_predict=test_predict$chf
@@ -576,76 +526,40 @@ for (seed in 1:500){
   }
   
   forest_loss[seed]=cIndex(test$time,test$status,as.vector(test_risk_score2))[1]
-  num_leaves[seed]=num_leaf
-  print(seed)
-}
-```
-
-
-```{r}
-find_terminal_node <- function(treeinfo,node, observation) {
-  # Recursively traverse the tree until a leaf node is reached
-  index=1
-  while (node$is_branching_node()) {
-    # Check the split variable and split value
-    feature_index=node$feature
   
-    split_var <- feature[feature_index+1]
-    split_val <- 0.5
-    
-    # Determine the next node based on the split
-    if (observation[[split_var]] < split_val) {
-      node <- node$left_child
-      index=tree_info$left_child[which(tree_info$parent==index)]
-    } else {
-      node <- node$right_child
-      index=tree_info$right_child[which(tree_info$parent==index)]
-    }
-  }
   
-  # Return the index of the leaf node
-  return(index)
-}
-```
-
-```{r}
-streed_super_loss01=rep(0,500)
-streed_initial_loss01=rep(0,500)
-forest_loss01=rep(0,500)
-num_leaves01=rep(0,500)
-
-for (seed in 1:500){
-  set.seed(seed)
-  train_index = sample(nrow(merged_data), 400, replace = F)
   train = merged_data01[train_index,]
   test = merged_data01[-train_index,]
-  tau=max(merged_data$time)
+  tau=max(merged_data01$time)
   
   structure=TRUE
   model1=ranger(Surv(time, status) ~ .,data=train,num.tree=500,mtry=ncol(train)-2,splitrule = "logrank", min.node.size = 5)
   
-  train_py <- r_to_py(train)
+  set.seed(109) 
+  # seed 109, num_leaf=4, min leaf size=13
+  # seed 7305, min leaf size=11
   
-  source_python("./Tuned\ STreeD.py")
-  
-  model=fit(r_to_py(train))
-  
-  feature=colnames(train)[-c(ncol(train),ncol(train)-1)]
-  
-  tree_info=index_tree(model$tree_)[[1]]
-  
-  
-  group=rep(0,dim(train)[1])
-  for (i in 1:length(group)){
-    group[i]=find_terminal_node(tree_info,model$tree_,train[i,])
+  # Fit single survival tree to get initial leaf allocation
+  model_prune=rpart(Surv(time, status) ~ .,data=train)
+  terminal_nodes <- which(model_prune$frame$var == "<leaf>")
+  f= function(node) {
+    # Extract the subset of data corresponding to the leaf node
+    node_data <- train[model_prune$where == as.numeric(node), ]
+    
+    # Fit a survival model to the data in the node
+    node_fit <- survfit(Surv(time, status) ~ 1, data = node_data)
+    
+    # Extract the cumulative hazard function
+    chf <- cumsum(node_fit$n.event / node_fit$n.risk)
+    data.frame(time = node_fit$time, chf = chf)
   }
+  chf_list=lapply(terminal_nodes,f)
   
-  terminal_nodes=as.numeric(names(table(group)))
-  
+  group=rep(0,nrow(train))
   for (i in 1:nrow(train)){
-    group[i]=which(terminal_nodes==group[i])
+    group[i]=which(terminal_nodes==model_prune$where[i])
   }
-  
+  group=unname(group)
   chf_value_dict=list() # a list of lists of chf values
   time_dict=list() # a list of lists of time points
   # We now make sure every leaf has at least 2 observations, otherwise the tree structure might not pertain in 10-fold cross validation. For leaves with 1 or 2 observations, we randomly combine this leaf with another leaf.
@@ -653,7 +567,7 @@ for (seed in 1:500){
   single_leaf=as.vector(which(leaf_size<=2))
   normal_leaf=as.vector(which(leaf_size>2))
   
-  reassign_dict=as.vector(1:sum(is.na(tree_info$left_child)))
+  reassign_dict=as.vector(1:length(terminal_nodes))
   for (i in 1:length(single_leaf)){
     new_assignment=sample(normal_leaf,1)
     group[which(group==single_leaf[i])]=new_assignment
@@ -666,7 +580,7 @@ for (seed in 1:500){
   for (i in 1:length(group)){
     group[i]=which(loose_group==group[i])
   }
-  for (i in 1:length(reassign_dict)){
+  for (i in 1:length(terminal_nodes)){
     reassign_dict[i]=which(loose_group==reassign_dict[i])
   }
   
@@ -674,15 +588,6 @@ for (seed in 1:500){
   
   # keep the first group allocation for CV
   first_group=group
-  
-  # save the chf for initial tree on full train data
-  chf_list=list()
-  time_list=list()
-  train_group=cbind(train,group)
-  for (i in 1:num_leaf){
-    chf_list[[i]]=survfit(Surv(time,status)~1, type = "fleming-harrington",data=subset(train_group,group==i))$cumhaz
-    time_list[[i]]=survfit(Surv(time,status)~1, type = "fleming-harrington",data=subset(train_group,group==i))$time
-  }
   
   # 10-fold cross validation
   if (min(table(group))>=2){ # condition automatically fulfilled from the recombining step
@@ -875,7 +780,7 @@ for (seed in 1:500){
   # chf_time=predict2$unique.death.times
   # chf_value=predict2$chf
   # chf_value_dict=list()
-  # for (i in 1:length(num_leaf)){
+  # for (i in 1:length(terminal_nodes)){
   #   chf_value_dict[[i]]=list(chf_list[[i]]$chf)
   #   time_dict[[i]]=list(chf_list[[i]]$time)
   # }
@@ -897,9 +802,13 @@ for (seed in 1:500){
   group=first_group
   chf=list()
   time=list()
+  for (i in 1:length(terminal_nodes)){
+    chf[[i]]=chf_list[[i]]$chf
+    time[[i]]=chf_list[[i]]$time
+  }
   
-  chf_value_dict=list(chf_list)
-  time_dict=list(time_list)
+  chf_value_dict=list(chf)
+  time_dict=list(time)
   
   test_risk_score=list()
   for (i in 1:num_leaf){
@@ -968,12 +877,8 @@ for (seed in 1:500){
   # test_predict=predict(model2, data=test)
   # chf_predict=test_predict$chf
   # test_group=rep(NA,nrow(test))
-  
-  test_group=rep(0,dim(test)[1])
-  for (i in 1:length(test_group)){
-    test_group[i]=find_terminal_node(tree_info,model$tree_,test[i,])
-  }
-  
+  test_group=rpart.predict.leaves(model_prune, test, type = "where")
+  test_group=unname(test_group)
   for (i in 1:nrow(test)){
     test_group[i]=reassign_dict[which(terminal_nodes==test_group[i])]
   }
@@ -1010,8 +915,8 @@ for (seed in 1:500){
     result=result+parameter[i]*test_risk_score[[i]] # calculating the ensemble risk score
   }
   
-  streed_super_loss01[seed]=cIndex(test$time,test$status,as.vector(result))[1]
-  streed_initial_loss01[seed]=test_c_index[1]
+  prune_super_loss01[seed]=cIndex(test$time,test$status,as.vector(result))[1]
+  prune_initial_loss01[seed]=test_c_index[1]
   
   test_predict=predict(model1, data=test)
   chf_predict=test_predict$chf
@@ -1027,48 +932,26 @@ for (seed in 1:500){
   }
   
   forest_loss01[seed]=cIndex(test$time,test$status,as.vector(test_risk_score2))[1]
-  num_leaves01[seed]=num_leaf
-  print(seed)
 }
 ```
 
-
 ```{r}
-summary2=read.csv("./c\ index\ comparison.csv")
-summary=read.csv("./STreeD\ c\ index\ comparison.csv")
-prune_summary=read.csv("./prune_summary.csv")
-# summary2$streed_initial_loss=streed_initial_loss
-# summary2$streed_super_loss=streed_super_loss
-# summary2$streed_initial_loss01=streed_initial_loss01
-# summary2$streed_super_loss01=streed_super_loss01
-# 
-# summary2$streed_super_ratio=summary2$streed_super_loss/summary2$initial_loss
-# summary2$streed_initial_ratio=summary2$streed_initial_loss/summary2$initial_loss
-par(cex.axis=0.8, mar=c(7, 10, 5, 1))
-boxplot(cbind(summary[3:6],summary2,prune_summary[1:4]),beside=T,horizontal=T,las=1,xlab="C index")
-```
-
-now is tuned and pruned
-```{r}
-overall_summary=cbind(summary[3:6],summary2,prune_summary[1:4])
-streed_initial_ratio=overall_summary$streed_initial_loss/overall_summary$initial_loss
-streed_super_ratio=overall_summary$streed_super_loss/overall_summary$initial_loss
-boxplot(cbind(streed_initial_ratio,streed_super_ratio),beside=T,horizontal=T,las=1,xlab="C index")
+summary=read.csv("./c\ index\ comparison.csv")
 ```
 
 ```{r}
-par(cex.axis=0.8, mar=c(9, 10, 5, 1))
-summary=as.data.frame(cbind(streed_initial_loss,streed_initial_loss01,streed_super_loss,streed_super_loss01,forest_loss,forest_loss01))
-# write.csv(summary,"Pruned STreeD.csv",row.names = F)
-boxplot(summary,beside=T,horizontal=T,las=1,xlab="C index")
-summary$initial01_ratio=summary$streed_initial_loss01/summary$streed_initial_loss
-summary$super01_ratio=summary$streed_super_loss01/summary$streed_initial_loss
-summary$forest01_ratio=summary$forest_loss01/summary$streed_initial_loss
-summary$super_ratio=summary$streed_super_loss/summary$streed_initial_loss
-summary$forest_ratio=summary$forest_loss/summary$streed_initial_loss
+summary=as.data.frame(cbind(forest_loss,forest_loss01,prune_initial_loss,prune_initial_loss01,prune_super_loss,prune_super_loss01))
+summary$initial01_ratio=summary$prune_initial_loss01/summary$prune_initial_loss
+summary$super01_ratio=summary$prune_super_loss01/summary$prune_initial_loss
+summary$forest01_ratio=summary$forest_loss01/summary$prune_initial_loss
+summary$super_ratio=summary$prune_super_loss/summary$prune_initial_loss
+summary$forest_ratio=summary$forest_loss/summary$prune_initial_loss
 summary_ratio=summary[,7:11]
-par(cex.axis=0.8, mar=c(8, 9, 5, 1))
-boxplot(summary,beside=T,horizontal=T,las=1,xlab="C index")
-boxplot(summary2[1:10],beside=T,horizontal=T,las=1,xlab="C index")
+par(cex.axis=0.8, mar=c(9, 10, 5, 1))
+boxplot(summary_ratio,beside=T,horizontal=T,las=1,xlab="C index")
+```
+```{r}
+write.csv(merged_data,"merge data continuous.csv",row.names = F)
+write.csv(merged_data01,"merge data binary.csv",row.names = F)
 ```
 

@@ -1,5 +1,5 @@
 ---
-title: "SurTree"
+title: "OST"
 output: html_document
 ---
 
@@ -14,6 +14,7 @@ This is an R Markdown document. Markdown is a simple formatting syntax for autho
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
 ```{r}
+library(iai)
 library(intsurv)
 library(survminer)
 library(survival)
@@ -24,169 +25,87 @@ library(alabama)
 library(dplyr)
 library(rpart)
 library(treeClust)
-Sys.unsetenv("RETICULATE_PYTHON")
-library(reticulate)
-library(rmarkdown)
-use_python("/usr/local/bin/python3")
 ```
 ```{r}
 merged_data=read_csv("./merge\ data\ continuous.csv")
 merged_data01=read_csv("./merge\ data\ binary.csv")
 ```
+```{r}
+X=merged_data01[,1:4]
+y=merged_data01[,5:6]
+```
 
 ```{r}
-index_tree <- function(node) {
-  # Initialize the index counter
-  index <- 0
-  
-  # Initialize a list to store the nodes by their index
-  node_list <- list()
-  
-  # Initialize a data frame to store the parent-child relationships
-  edge_list <- data.frame(parent = integer(), left_child = integer(), right_child = integer(), stringsAsFactors = FALSE)
-  
-  # Helper function to recursively index nodes and store relationships
-  index_node <- function(node) {
-    if (is.null(node)) {
-      return(NULL)
-    }
-    
-    # Increment the index for the current node
-    index <<- index + 1
-    
-    # Store the current index for this node
-    current_index <- index
-    
-    # Add the node to the list with its index
-    node_list[[as.character(current_index)]] <- node
-    
-    # Initialize left and right child indices as NA
-    left_index <- NA
-    right_index <- NA
-    
-    # Process the left child if it exists
-    if (!is.null(node$left_child)) {
-      left_index <- index_node(node$left_child)
-    }
-    
-    # Process the right child if it exists
-    if (!is.null(node$right_child)) {
-      right_index <- index_node(node$right_child)
-    }
-    
-    # Add the relationship to the edge list
-    edge_list <<- rbind(edge_list, data.frame(parent = current_index, left_child = left_index, right_child = right_index))
-    
-    # Return the current index
-    return(current_index)
-  }
-  
-  # Start indexing from the root node
-  index_node(node)
-  
-  # Return the indexed nodes and relationships
-  list(edge_list = edge_list)
-}
+grid <- iai::grid_search(
+    iai::optimal_tree_survival_learner(
+        random_seed = 1,
+        missingdatamode = "separate_class",
+        minbucket = 40,
+    ),
+    max_depth = 1:4,
+)
+iai::fit(grid, X, y$status==1, y$time,
+         validation_criterion = "harrell_c_statistic")
+```
 
-find_terminal_node <- function(treeinfo,node, observation) {
-  # Recursively traverse the tree until a leaf node is reached
+```{r}
+model=iai::get_learner(grid)
+```
+
+```{r}
+find_terminal_node=function(learner,observation){
   index=1
-  while (node$is_branching_node()) {
-    # Check the split variable and split value
-    feature_index=node$feature
-    feature_description=feature[feature_index+1]
-    split_str=strsplit(feature_description," ")[[1]]
-    split_var <- colnames(train)[as.numeric(split_str[2])]
-    split_val <- as.numeric(split_str[length(split_str)])
-    
-    # Determine the next node based on the split
-    if (observation[[split_var]] > split_val) {
-      node <- node$left_child
-      index=tree_info$left_child[which(tree_info$parent==index)]
-    } else {
-      node <- node$right_child
-      index=tree_info$right_child[which(tree_info$parent==index)]
+  while(!iai::is_leaf(learner,index)){
+    feature=iai::get_split_feature(learner,index)
+    value=iai::get_split_threshold(learner,index)
+    if (observation[[feature]]<value){
+      index=iai::get_lower_child(learner,index)
+    }
+    else{
+      index=iai::get_upper_child(learner,index)
     }
   }
   
-  # Return the index of the leaf node
   return(index)
 }
-```
-
-```{r}
-set.seed(1)
-train_index = sample(nrow(merged_data), 400, replace = F)
-train = merged_data[train_index,]
-test = merged_data[-train_index,]
-tau=max(merged_data$time)
-
-
-train_py <- r_to_py(train)
-
-source_python("./Tuned\ STreeD.py")
-
-model=fit(r_to_py(train))
-
-feature_list=model$binarizer_$continuous_binarizer$column_names_
-num_feature=length(feature_list)*model$n_thresholds
-feature=c()
-for (i in 1:length(feature_list)){
-  for (j in 1:length(feature_list[[i]])){
-    feature=c(feature,feature_list[[i]][j])
-  }
-}
-
-
-tree_info=index_tree(model$tree_)[[1]]
-
-
-group=rep(0,dim(merged_data)[1])
-for (i in 1:length(group)){
-  group[i]=find_terminal_node(tree_info,model$tree_,merged_data[i,])
-}
-table(group)
 
 ```
 
 ```{r}
-streed_initial_loss=rep(0,500)
-streed_super_loss=rep(0,500)
+library(ranger)
+ost_initial_loss=rep(0,500)
+ost_super_loss=rep(0,500)
 forest_loss=rep(0,500)
 num_leaves=rep(0,500)
 
 for (seed in 1:500){
   set.seed(seed)
-  train_index = sample(nrow(merged_data), 400, replace = F)
+  train_index = sample(nrow(merged_data), 500, replace = F)
   train = merged_data[train_index,]
   test = merged_data[-train_index,]
+  X=train[,1:4]
+  y=train[,5:6]
   tau=max(merged_data$time)
   
   structure=TRUE
   model1=ranger(Surv(time, status) ~ .,data=train,num.tree=500,mtry=ncol(train)-2,splitrule = "logrank", min.node.size = 5)
   
-  train_py <- r_to_py(train)
+  grid <- iai::grid_search(
+      iai::optimal_tree_survival_learner(
+          random_seed = 1,
+          missingdatamode = "separate_class",
+          minbucket = 40,
+      ),
+      max_depth = 4
+  )
+  iai::fit(grid, X, y$status==1, y$time,
+           validation_criterion = "harrell_c_statistic")
   
-  source_python("./Tuned\ STreeD.py")
-  
-  model=fit(r_to_py(train))
-  
-  feature_list=model$binarizer_$continuous_binarizer$column_names_
-  num_feature=length(feature_list)*model$n_thresholds
-  feature=c()
-  for (i in 1:length(feature_list)){
-    for (j in 1:length(feature_list[[i]])){
-      feature=c(feature,feature_list[[i]][j])
-    }
-  }
-  
-  
-  tree_info=index_tree(model$tree_)[[1]]
-  
+  model=iai::get_learner(grid)
   
   group=rep(0,dim(train)[1])
   for (i in 1:length(group)){
-    group[i]=find_terminal_node(tree_info,model$tree_,train[i,])
+    group[i]=find_terminal_node(model,train[i,])
   }
   
   terminal_nodes=as.numeric(names(table(group)))
@@ -202,7 +121,7 @@ for (seed in 1:500){
   single_leaf=as.vector(which(leaf_size<=2))
   normal_leaf=as.vector(which(leaf_size>2))
   
-  reassign_dict=as.vector(1:sum(is.na(tree_info$left_child)))
+  reassign_dict=as.vector(1:length(table(group)))
   for (i in 1:length(single_leaf)){
     new_assignment=sample(normal_leaf,1)
     group[which(group==single_leaf[i])]=new_assignment
@@ -520,7 +439,7 @@ for (seed in 1:500){
   
   test_group=rep(0,dim(test)[1])
   for (i in 1:length(test_group)){
-    test_group[i]=find_terminal_node(tree_info,model$tree_,test[i,])
+    test_group[i]=find_terminal_node(model,test[i,])
   }
   
   for (i in 1:nrow(test)){
@@ -559,10 +478,10 @@ for (seed in 1:500){
     result=result+parameter[i]*test_risk_score[[i]] # calculating the ensemble risk score
   }
   
-  streed_super_loss[seed]=cIndex(test$time,test$status,as.vector(result))[1]
-  streed_initial_loss[seed]=test_c_index[1]
+  ost_super_loss[seed]=cIndex(test$time,test$status,as.vector(result))[1]
+  ost_initial_loss[seed]=test_c_index[1]
   
-  test_predict=predict(model1, data=test)
+  test_predict=ranger:::predict.ranger(model1,test)
   chf_predict=test_predict$chf
   chf_predict_time=test_predict$unique.death.times
   test_risk_score2=rep(0,nrow(test))
@@ -583,61 +502,39 @@ for (seed in 1:500){
 
 
 ```{r}
-find_terminal_node <- function(treeinfo,node, observation) {
-  # Recursively traverse the tree until a leaf node is reached
-  index=1
-  while (node$is_branching_node()) {
-    # Check the split variable and split value
-    feature_index=node$feature
-  
-    split_var <- feature[feature_index+1]
-    split_val <- 0.5
-    
-    # Determine the next node based on the split
-    if (observation[[split_var]] < split_val) {
-      node <- node$left_child
-      index=tree_info$left_child[which(tree_info$parent==index)]
-    } else {
-      node <- node$right_child
-      index=tree_info$right_child[which(tree_info$parent==index)]
-    }
-  }
-  
-  # Return the index of the leaf node
-  return(index)
-}
-```
-
-```{r}
-streed_super_loss01=rep(0,500)
-streed_initial_loss01=rep(0,500)
+ost_initial_loss01=rep(0,500)
+ost_super_loss01=rep(0,500)
 forest_loss01=rep(0,500)
 num_leaves01=rep(0,500)
 
 for (seed in 1:500){
   set.seed(seed)
-  train_index = sample(nrow(merged_data), 400, replace = F)
+  train_index = sample(nrow(merged_data), 500, replace = F)
   train = merged_data01[train_index,]
   test = merged_data01[-train_index,]
+  X=train[,1:4]
+  y=train[,5:6]
   tau=max(merged_data$time)
   
   structure=TRUE
   model1=ranger(Surv(time, status) ~ .,data=train,num.tree=500,mtry=ncol(train)-2,splitrule = "logrank", min.node.size = 5)
-  
-  train_py <- r_to_py(train)
-  
-  source_python("./Tuned\ STreeD.py")
-  
-  model=fit(r_to_py(train))
-  
-  feature=colnames(train)[-c(ncol(train),ncol(train)-1)]
-  
-  tree_info=index_tree(model$tree_)[[1]]
-  
+
+  grid <- iai::grid_search(
+      iai::optimal_tree_survival_learner(
+          random_seed = 1,
+          missingdatamode = "separate_class",
+          minbucket = 40,
+      ),
+      max_depth = 4
+  )
+  iai::fit(grid, X, y$status==1, y$time,
+           validation_criterion = "harrell_c_statistic")
+
+  model=iai::get_learner(grid)
   
   group=rep(0,dim(train)[1])
   for (i in 1:length(group)){
-    group[i]=find_terminal_node(tree_info,model$tree_,train[i,])
+    group[i]=find_terminal_node(model,train[i,])
   }
   
   terminal_nodes=as.numeric(names(table(group)))
@@ -653,7 +550,7 @@ for (seed in 1:500){
   single_leaf=as.vector(which(leaf_size<=2))
   normal_leaf=as.vector(which(leaf_size>2))
   
-  reassign_dict=as.vector(1:sum(is.na(tree_info$left_child)))
+  reassign_dict=as.vector(1:length(table(group)))
   for (i in 1:length(single_leaf)){
     new_assignment=sample(normal_leaf,1)
     group[which(group==single_leaf[i])]=new_assignment
@@ -971,7 +868,7 @@ for (seed in 1:500){
   
   test_group=rep(0,dim(test)[1])
   for (i in 1:length(test_group)){
-    test_group[i]=find_terminal_node(tree_info,model$tree_,test[i,])
+    test_group[i]=find_terminal_node(model,test[i,])
   }
   
   for (i in 1:nrow(test)){
@@ -1010,10 +907,10 @@ for (seed in 1:500){
     result=result+parameter[i]*test_risk_score[[i]] # calculating the ensemble risk score
   }
   
-  streed_super_loss01[seed]=cIndex(test$time,test$status,as.vector(result))[1]
-  streed_initial_loss01[seed]=test_c_index[1]
+  ost_super_loss01[seed]=cIndex(test$time,test$status,as.vector(result))[1]
+  ost_initial_loss01[seed]=test_c_index[1]
   
-  test_predict=predict(model1, data=test)
+  test_predict=ranger:::predict.ranger(model1,test)
   chf_predict=test_predict$chf
   chf_predict_time=test_predict$unique.death.times
   test_risk_score2=rep(0,nrow(test))
@@ -1032,43 +929,11 @@ for (seed in 1:500){
 }
 ```
 
-
 ```{r}
-summary2=read.csv("./c\ index\ comparison.csv")
-summary=read.csv("./STreeD\ c\ index\ comparison.csv")
-prune_summary=read.csv("./prune_summary.csv")
-# summary2$streed_initial_loss=streed_initial_loss
-# summary2$streed_super_loss=streed_super_loss
-# summary2$streed_initial_loss01=streed_initial_loss01
-# summary2$streed_super_loss01=streed_super_loss01
-# 
-# summary2$streed_super_ratio=summary2$streed_super_loss/summary2$initial_loss
-# summary2$streed_initial_ratio=summary2$streed_initial_loss/summary2$initial_loss
-par(cex.axis=0.8, mar=c(7, 10, 5, 1))
-boxplot(cbind(summary[3:6],summary2,prune_summary[1:4]),beside=T,horizontal=T,las=1,xlab="C index")
+ost_summary=cbind(forest_loss,forest_loss01,ost_initial_loss,ost_initial_loss01,ost_super_loss,ost_super_loss01,num_leaves,num_leaves01)
+par(cex.axis=0.8, mar=c(5, 10, 5, 1))
+boxplot(ost_summary[,1:6],beside=T,horizontal=T,las=1,xlab="C index")
+# write.csv(ost_summary,"ost c index.csv",row.names = F)
 ```
 
-now is tuned and pruned
-```{r}
-overall_summary=cbind(summary[3:6],summary2,prune_summary[1:4])
-streed_initial_ratio=overall_summary$streed_initial_loss/overall_summary$initial_loss
-streed_super_ratio=overall_summary$streed_super_loss/overall_summary$initial_loss
-boxplot(cbind(streed_initial_ratio,streed_super_ratio),beside=T,horizontal=T,las=1,xlab="C index")
-```
-
-```{r}
-par(cex.axis=0.8, mar=c(9, 10, 5, 1))
-summary=as.data.frame(cbind(streed_initial_loss,streed_initial_loss01,streed_super_loss,streed_super_loss01,forest_loss,forest_loss01))
-# write.csv(summary,"Pruned STreeD.csv",row.names = F)
-boxplot(summary,beside=T,horizontal=T,las=1,xlab="C index")
-summary$initial01_ratio=summary$streed_initial_loss01/summary$streed_initial_loss
-summary$super01_ratio=summary$streed_super_loss01/summary$streed_initial_loss
-summary$forest01_ratio=summary$forest_loss01/summary$streed_initial_loss
-summary$super_ratio=summary$streed_super_loss/summary$streed_initial_loss
-summary$forest_ratio=summary$forest_loss/summary$streed_initial_loss
-summary_ratio=summary[,7:11]
-par(cex.axis=0.8, mar=c(8, 9, 5, 1))
-boxplot(summary,beside=T,horizontal=T,las=1,xlab="C index")
-boxplot(summary2[1:10],beside=T,horizontal=T,las=1,xlab="C index")
-```
 
