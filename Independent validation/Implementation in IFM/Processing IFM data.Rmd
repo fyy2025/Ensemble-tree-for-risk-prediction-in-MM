@@ -1,0 +1,48 @@
+---
+title: "Processing IFM data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+```{r}
+library(readr)
+library(dplyr)
+library(tidyr)
+library(janitor)
+```
+
+```{r}
+load("./Survival2020.RData")
+load("./DESeq2Batch1.RData")
+```
+
+```{r}
+patient_id=IFMSurvival2020$subjid
+```
+
+```{r}
+TPM <- as.data.frame(TPMGeneBatch1) %>% dplyr::select(contains("_"))
+TPM_IFM = TPM[,-c(1:6)]
+patient_names = colnames(TPM_IFM)
+```
+
+```{r}
+patient_names=gsub(pattern = "_",replacement = "-",x = patient_names)
+```
+
+
+```{r}
+tidydata=t(TPM_IFM)%>%
+  as.data.frame()
+write.csv(tidydata,"./TPM_IFM.csv",row.names=T)
+write.csv(IFMSurvival2020,"./Survival_IFM.csv")
+write.csv(geneAnnot,"./genedict.csv")
+```
+

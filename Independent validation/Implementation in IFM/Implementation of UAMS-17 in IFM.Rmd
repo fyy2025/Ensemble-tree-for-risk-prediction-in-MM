@@ -1,0 +1,169 @@
+---
+title: "Implementation of EMC-92"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+Get the probe set IDs and weights in the EMC-92 model
+```{r}
+library(geneClassifiers)
+UAMS17Classifier<-getClassifier("UAMS17")
+UAMS17Classifier
+weights=getWeights(UAMS17Classifier)
+weights
+probeset_id=names(weights)
+```
+
+BioMart mapping
+```{r}
+library(biomaRt) 
+ensembl = useEnsembl("ensembl",dataset="hsapiens_gene_ensembl",mirror="www") 
+affy_ensembl= c("affy_hg_u133_plus_2", "ensembl_gene_id")
+dict=getBM(attributes=affy_ensembl, filters="affy_hg_u133_plus_2",values = probeset_id, mart = ensembl)
+```
+
+Read the MMRF TPM data and standardize the expression levels
+```{r}
+library(readr)
+library(tidyr)
+library(dplyr)
+library(janitor)
+tidydata=read_csv("./TPM_IFM.csv")
+patient=tidydata[["...1"]]
+tidydata=as.data.frame(tidydata)
+tidydata=sapply(tidydata,as.numeric )
+scaled_data=scale(tidydata)
+```
+
+```{r}
+patient=gsub(pattern = "_",replacement = "-",x = patient)
+patient=substr(patient,1,nchar(patient)-2)
+```
+
+
+```{r}
+# BiocManager::install("annotate")
+# BiocManager::install("hgu133plus2.db")
+```
+
+
+Brainarray mapping
+```{r}
+library(readr)
+HGU133Plus2_Hs_ENSG_mapping <- read_delim("/Users/fanyiyang/Desktop/Research/summer/Implementation\ of\ risk\ models/HGU133Plus2_Hs_ENSG_mapping.txt",delim = "\t", escape_double = FALSE,  trim_ws = TRUE)
+# View(HGU133Plus2_Hs_ENSG_mapping)
+
+HGU133Plus2_Hs_ENSG_mapping2 <- HGU133Plus2_Hs_ENSG_mapping[HGU133Plus2_Hs_ENSG_mapping$`Affy Probe Set Name` %in% probeset_id,c(1,7)]
+HGU133Plus2_Hs_ENSG_mapping2 <- HGU133Plus2_Hs_ENSG_mapping2[!duplicated(HGU133Plus2_Hs_ENSG_mapping2),]
+brainarray_out=setdiff(probeset_id,HGU133Plus2_Hs_ENSG_mapping2$`Affy Probe Set Name`) # not in brainarray, try bioMart
+HGU133Plus2_Hs_ENSG_mapping2$`Probe Set Name` <- gsub(pattern = "_at",replacement = "",x = HGU133Plus2_Hs_ENSG_mapping2$`Probe Set Name`)
+# brainarray_one=intersect(colnames(scaled_data),HGU133Plus2_Hs_ENSG_mapping2$`Probe Set Name`) 
+brainarray_dict=subset(HGU133Plus2_Hs_ENSG_mapping2,`Probe Set Name` %in% sub('\\.[0-9]*$', '', colnames(scaled_data)))# in TPM and have one ensembl to one probe set in brainarray
+```
+
+For those probe sets not in brainarray, see if they are in bioMart and how many ensembl ids each probe set maps to
+```{r}
+# how many ensembl IDs did each probe set map to in bioMart
+count=rep(0,length(weights))
+for (i in 1:length(probeset_id)){
+  filtered_dict=subset(dict,affy_hg_u133_plus_2==probeset_id[i] & ensembl_gene_id %in% sub('\\.[0-9]*$', '', colnames(scaled_data)))
+  count[i]=nrow(filtered_dict)
+}
+count[!(probeset_id %in% brainarray_dict$`Affy Probe Set Name`)]
+count[probeset_id %in% brainarray_out]
+```
+
+Create list of all the ensembl ids in the UAMS model and record thier revised weights
+```{r}
+first=0
+second=0
+revised_weight=c()
+revised_ensembl=c()
+revised_probeset=c()
+for (i in 1:length(weights)){
+  probeset=probeset_id[i]
+  if (probeset %in% brainarray_dict$`Affy Probe Set Name`){
+    revised_weight=c(revised_weight,weights[i])
+    revised_ensembl=c(revised_ensembl,brainarray_dict$`Probe Set Name`[brainarray_dict$`Affy Probe Set Name`==probeset])
+    revised_probeset=c(revised_probeset,probeset_id[i])
+    first=first+1
+  }
+  else if (count[i]<5 & count[i]>0 ){
+    filtered_dict=subset(dict,affy_hg_u133_plus_2==probeset_id[i] & ensembl_gene_id %in% sub('\\.[0-9]*$', '', colnames(scaled_data)))
+    revised_weight=c(revised_weight,rep(weights[i]/count[i],count[i])) # take the average of multiple ensembl genes mapping to the same probe set
+    revised_ensembl=c(revised_ensembl,filtered_dict$ensembl_gene_id)
+    revised_probeset=c(revised_probeset,rep(probeset_id[i],count[i]))
+    second=second+1
+  }
+}
+# 60 genes from brainarray, 8 genes from bioMart
+```
+
+```{r}
+data.frame(revised_probeset,revised_ensembl, unname(revised_weight))
+length(unique(revised_probeset))
+length(unique(revised_weight))
+```
+
+```{r}
+colnames(scaled_data)=sub('\\.[0-9]*$', '', colnames(scaled_data))
+```
+
+
+Calculate the revised risk score, higher score represents higher risk
+```{r}
+score=rep(0,nrow(scaled_data))
+for (i in 1:length(revised_weight)){
+  score=score+revised_weight[i]*scaled_data[,revised_ensembl[i]]
+}
+```
+
+```{r}
+cutoff=quantile(score,0.8)
+high_risk=patient[score>=cutoff]
+low_risk=patient[score<cutoff]
+```
+
+
+
+Read in the survival data and keep only patients with risk categorization.
+```{r}
+IFM_Survival=read_csv("./Survival_IFM.csv")
+IFM_Survival=subset(IFM_Survival,subjid %in% high_risk | subjid %in% low_risk)
+IFM_Survival$risk=ifelse(IFM_Survival$subjid %in% high_risk, 1, 0) #risk=1 represents high risk
+```
+
+```{r}
+library(survival)
+library(ggfortify)
+PFS_fit=survfit(Surv(TTRelpase,Relapse) ~ risk, data = IFM_Survival)
+autoplot(PFS_fit,main="PFS of different risk groups categorized by EMC-92")
+```
+```{r}
+survdiff(Surv(TTRelpase,Relapse) ~ risk, data = IFM_Survival)
+```
+
+```{r}
+OS_fit=survfit(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
+autoplot(OS_fit,main="OS of different risk groups categorized by EMC-92")
+```
+```{r}
+survdiff(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
+```
+
+```{r}
+UAMS_score=data.frame(score)
+UAMS_score$patient=patient
+write.csv(UAMS_score,"UAMS17_score_IFM.csv",row.names=F)
+```
+

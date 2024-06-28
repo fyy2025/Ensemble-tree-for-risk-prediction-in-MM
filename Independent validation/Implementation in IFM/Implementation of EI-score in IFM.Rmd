@@ -1,0 +1,150 @@
+---
+title: "Implementation of EMC-92"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+Paste the models of EI-score
+
+EI-score[OS]: (APOBEC2: ≤0.20=0, >0.20=3) + (APOBEC3B: ≤3.79=0, >3.79=3) + 
+(IL11: ≤0.48=0,>0.48 =2.5) + (TGFB1: ≤0.11=0, >0.11 =1) + (TGFB3: ≤0.10=0,>0.10=2) + 
+(ß2M: ≤4.22=0, >4.22=4) + (LDH: ≤3.18=0, >3.18=2)
+
+EI-score[PFS]: (APOBEC2: ≤0.19=0, >0.19=4) + (APOBEC3B: ≤6.91=0, >6.91=3) + (IL11: ≤0.56=0,>0.56 =2) + 
+(TGFB1: ≤0.43=0, >0.43 =1) + (TGFB3: ≤0.03=0, >0.03=1) +
+(ß2M: ≤3.33=0, >3.33=4) + (LDH: ≤3.08=0, >3.08=2) 
+
+
+Map the gene ids to the ensembl id
+```{r}
+library(readr)
+annotLookup=read_csv("./genedict.csv")
+gene_list=c("APOBEC2","APOBEC3B","IL11","TGFB1","TGFB3")
+dict=subset(annotLookup,GeneSymbol %in% gene_list)
+```
+
+
+Read the MMRF TPM data and standardize the expression levels
+```{r}
+library(readr)
+library(tidyr)
+library(dplyr)
+library(janitor)
+tidydata=read_csv("./TPM_IFM.csv")
+patient_id=tidydata[["...1"]]
+data=subset(tidydata,select = names(tidydata) %in% dict$GeneID)
+for (i in 1:5){
+  colnames(data)[i]=dict$GeneSymbol[which(dict$GeneID==colnames(data)[i])]
+}
+
+data$patient=substr(patient_id,1,nchar(patient_id)-2)
+data$patient=gsub(pattern = "_",replacement = "-",x = data$patient)
+```
+
+
+Read the IFM patient LDH data
+```{r}
+IFM_LDH=drop_na(read_delim("./IFM_266_LDH.txt")[,c(1,5)])
+colnames(IFM_LDH)[1]="patient"
+colnames(IFM_LDH)[2]="LDH"
+IFM_LDH$LDH=IFM_LDH$LDH*0.01667
+```
+
+Read the IFM patient B2M data
+```{r}
+IFM_B2M=drop_na(read_delim("./IFM-Clinical-02152015.txt")[c("beta_2","Nom")])
+colnames(IFM_B2M)[1]="B2M"
+colnames(IFM_B2M)[2]="patient"
+```
+
+
+```{r}
+merged=merge(data,IFM_B2M,by="patient")
+merged_data=merge(merged,IFM_LDH,by="patient")
+```
+
+Calculate the revised risk score, higher score represents higher risk
+
+EI-score[OS]: (APOBEC2: ≤0.20=0, >0.20=3) + (APOBEC3B: ≤3.79=0, >3.79=3) + 
+(IL11: ≤0.48=0,>0.48 =2.5) + (TGFB1: ≤0.11=0, >0.11 =1) + (TGFB3: ≤0.10=0,>0.10=2) + 
+(ß2M: ≤4.22=0, >4.22=4) + (LDH: ≤3.18=0, >3.18=2)
+```{r}
+OS_score=rep(0,nrow(merged_data))
+OS_score=OS_score+ifelse(merged_data$LDH>3.18,2,0)
+OS_score=OS_score+ifelse(merged_data$B2M>4.22,4,0)
+OS_score=OS_score+ifelse(merged_data$APOBEC2>0.2,3,0)
+OS_score=OS_score+ifelse(merged_data$APOBEC3B>3.79,3,0)
+OS_score=OS_score+ifelse(merged_data$IL11>0.48,2.5,0)
+OS_score=OS_score+ifelse(merged_data$TGFB1>0.11,1,0)
+OS_score=OS_score+ifelse(merged_data$TGFB3>0.1,2,0)
+```
+
+EI-score[PFS]: (APOBEC2: ≤0.19=0, >0.19=4) + (APOBEC3B: ≤6.91=0, >6.91=3) + (IL11: ≤0.56=0,>0.56 =2) + 
+(TGFB1: ≤0.43=0, >0.43 =1) + (TGFB3: ≤0.03=0, >0.03=1) +
+(ß2M: ≤3.33=0, >3.33=4) + (LDH: ≤3.08=0, >3.08=2) 
+```{r}
+PFS_score=rep(0,nrow(merged_data))
+PFS_score=PFS_score+ifelse(merged_data$LDH>3.08,2,0)
+PFS_score=PFS_score+ifelse(merged_data$B2M>3.33,4,0)
+PFS_score=PFS_score+ifelse(merged_data$APOBEC2>0.19,4,0)
+PFS_score=PFS_score+ifelse(merged_data$APOBEC3B>6.91,3,0)
+PFS_score=PFS_score+ifelse(merged_data$IL11>0.56,2,0)
+PFS_score=PFS_score+ifelse(merged_data$TGFB1>0.43,1,0)
+PFS_score=PFS_score+ifelse(merged_data$TGFB3>0.03,1,0)
+```
+
+
+```{r}
+OS_cutoff=quantile(OS_score,0.8)
+OS_high_risk=merged_data$patient[OS_score>=OS_cutoff]
+OS_low_risk=merged_data$patient[OS_score<OS_cutoff]
+```
+
+```{r}
+PFS_cutoff=quantile(PFS_score,0.8)
+PFS_high_risk=merged_data$patient[PFS_score>=PFS_cutoff]
+PFS_low_risk=merged_data$patient[PFS_score<PFS_cutoff]
+```
+
+```{r}
+IFM_Survival=read_csv("./Survival_IFM.csv")
+IFM_Survival=subset(IFM_Survival,subjid %in% OS_high_risk | subjid %in% OS_low_risk)
+IFM_Survival$risk=ifelse(IFM_Survival$subjid %in% OS_high_risk, 1, 0) #risk=1 represents high risk
+```
+
+```{r}
+library(survival)
+library(ggfortify)
+OS_fit=survfit(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
+autoplot(OS_fit,main="OS of different risk groups categorized by EI score")
+```
+```{r}
+survdiff(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
+```
+
+```{r}
+IFM_Survival=read_csv("./Survival_IFM.csv")
+IFM_Survival=subset(IFM_Survival,subjid %in% PFS_high_risk | subjid %in% PFS_low_risk)
+IFM_Survival$risk=ifelse(IFM_Survival$subjid %in% PFS_high_risk, 1, 0) #risk=1 represents high risk
+```
+
+```{r}
+PFS_fit=survfit(Surv(TTRelpase,Relapse) ~ risk, data = IFM_Survival)
+autoplot(PFS_fit,main="PFS of different risk groups categorized by EI score")
+survdiff(Surv(TTRelpase,Relapse) ~ risk, data = IFM_Survival)
+```
+```{r}
+EI_OS_score=data.frame(OS_score,merged_data$patient)%>%
+  rename("patient"=merged_data.patient)
+write.csv(EI_OS_score,"EI_OS_score_IFM.csv",row.names = F)
+```

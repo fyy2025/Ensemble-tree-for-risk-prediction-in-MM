@@ -1,0 +1,111 @@
+---
+title: "Implementation of EMC-92"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+BioMart mapping
+```{r}
+library(biomaRt) 
+mart <- useMart('ENSEMBL_MART_ENSEMBL')
+mart <- useDataset('hsapiens_gene_ensembl', mart)
+
+annotLookup <- getBM(
+  mart = mart,
+  attributes = c(
+    'hgnc_symbol',
+    'ensembl_gene_id',
+    'gene_biotype'),
+  uniqueRows = TRUE)
+```
+
+```{r}
+annotLookup=read_csv("./genedict.csv")
+```
+
+
+```{r}
+library(readr)
+gene_list=read.csv("./Proliferation\ Index\ Gene\ Symbols.csv")$Gene.Symbol
+dict=subset(annotLookup,GeneSymbol %in% gene_list)
+```
+
+
+Read the MMRF TPM data and standardize the expression levels
+```{r}
+library(readr)
+library(tidyr)
+library(dplyr)
+library(janitor)
+tidydata=read_csv("./TPM_IFM.csv")
+patient=tidydata[["...1"]]
+tidydata=as.data.frame(tidydata)
+tidydata=sapply(tidydata,as.numeric )
+scaled_data=scale(tidydata)
+```
+
+```{r}
+scaled_data=as.data.frame(scaled_data)
+# colnames(scaled_data)=sub('\\.[0-9]*$', '', colnames(scaled_data))
+scaled_data=subset(scaled_data, select = names(scaled_data) %in% dict$GeneID)
+```
+
+
+Calculated the revised risk score, higher score represents higher risk
+```{r}
+score=rep(0,nrow(scaled_data))
+for (i in 1:ncol(scaled_data)){
+  score=score+as.data.frame(scaled_data)[,i]
+}
+```
+
+```{r}
+patient=gsub(pattern = "_",replacement = "-",x = patient)
+patient=substr(patient,1,nchar(patient)-2)
+cutoff=quantile(score,0.9)
+high_risk=patient[score>=cutoff]
+low_risk=patient[score<cutoff]
+```
+
+
+
+Read in the survival data and keep only patients with risk categorization.
+```{r}
+IFM_Survival=read_csv("./Survival_IFM.csv")
+IFM_Survival=subset(IFM_Survival,subjid %in% high_risk | subjid %in% low_risk)
+IFM_Survival$risk=ifelse(IFM_Survival$subjid %in% high_risk, 1, 0) #risk=1 represents high risk
+```
+
+```{r}
+library(survival)
+library(ggfortify)
+PFS_fit=survfit(Surv(TTRelpase,Relapse) ~ risk, data = IFM_Survival)
+autoplot(PFS_fit,main="PFS of different risk groups categorized by EMC-92")
+```
+```{r}
+survdiff(Surv(TTRelpase,Relapse) ~ risk, data = IFM_Survival)
+```
+
+```{r}
+OS_fit=survfit(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
+autoplot(OS_fit,main="OS of different risk groups categorized by EMC-92")
+```
+```{r}
+survdiff(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
+```
+
+```{r}
+GPI_score=data.frame(score)
+GPI_score$patient=patient
+write.csv(GPI_score,"GPI_score_IFM.csv",row.names=F)
+```
