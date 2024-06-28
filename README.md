@@ -36,4 +36,12 @@ The folder contains csv files for respective risk scores obtained from risk pred
 
 The folder contains exploration on methods to develop an optimal tree to begin the ensemble with.
 
-- The `SurTree.Rmd` file runs 500 bootstapping simulations to explore performance of ensemble model on optimal survival trees (using STreeD package in python). STreeD is developed in python (https://github.com/AlgTUDelft/pystreed), the `SurTree Implementation.py` calls the function in python.
+- The files including STreeD in their names explore the performance of ensemble model on optimal survival trees (using STreeD package in python). STreeD is developed in python (https://github.com/AlgTUDelft/pystreed), the `.py` files call the function in python.
+
+- The files including rpart in their names explore the performance of ensemble model with initial tree fit by rpart package in R.
+
+- The files including OST in their names explore the performance of ensemble model on optimal survival trees (using OST algorithm implemented in Julia). OST can be called using the IAI package in R. https://docs.interpretable.ai/stable/IAI-R/quickstart/ot_survival/
+
+## Independent Validation
+
+The folder contains exploration on ensemble tree performance while validated on an independent dataset. We train the model using the MMRF dataset and validate the models on the IFM dataset, after implementing all risk prediction models in the IFM dataset.
