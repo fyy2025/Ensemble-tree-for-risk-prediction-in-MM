@@ -1,0 +1,98 @@
+---
+title: "real data analysis experiment"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(intsurv)
+library(survminer)
+library(survival)
+library(readr)
+library(randomForestSRC)
+library(ranger)
+library(alabama)
+library(dplyr)
+library(rpart)
+library(treeClust)
+library(rpart)
+library(tidyr)
+```
+
+
+```{r}
+IFM_data_continuous=read_csv("IFM_8_continuous.csv")[,-2]
+IFM_data_continuous$dataset=rep("IFM",nrow(IFM_data_continuous))
+MMRF_data_continuous=read_csv("MMRF_8_continuous.csv")[,-2]
+MMRF_data_continuous$dataset=rep("MMRF",nrow(MMRF_data_continuous))
+Gamer_data_continuous=read_csv("Gamer_7_continuous.csv")
+Gamer_data_continuous$dataset=rep("Gamer",nrow(Gamer_data_continuous))
+UAMS_data_continuous=read_csv("UAMS_8_continuous.csv")[,-2]
+UAMS_data_continuous$dataset=rep("UAMS",nrow(UAMS_data_continuous))
+```
+
+```{r}
+# merged_IFM_data_binary=merged_IFM_data_continuous
+# merged_IFM_data_binary$EMC=ifelse(merged_IFM_data_continuous$EMC>quantile(merged_IFM_data_continuous$EMC,0.8),1,0)
+# merged_IFM_data_binary$EI=ifelse(merged_IFM_data_continuous$EI>quantile(merged_IFM_data_continuous$EI,0.8),1,0)
+# merged_IFM_data_binary$UAMS70=ifelse(merged_IFM_data_continuous$UAMS70>quantile(merged_IFM_data_continuous$UAMS70,0.8),1,0)
+# merged_IFM_data_binary$GPI=ifelse(merged_IFM_data_continuous$GPI>quantile(merged_IFM_data_continuous$GPI,0.9),1,0)
+# merged_IFM_data_binary$UAMS17=ifelse(merged_IFM_data_continuous$UAMS17>quantile(merged_IFM_data_continuous$UAMS17,0.9),1,0)
+# merged_IFM_data_binary$UAMS80=ifelse(merged_IFM_data_continuous$UAMS80>quantile(merged_IFM_data_continuous$UAMS80,0.9),1,0)
+# merged_IFM_data_binary$HM19=ifelse(merged_IFM_data_continuous$HM19>quantile(merged_IFM_data_continuous$HM19,0.8),1,0)
+# merged_IFM_data_binary$IFM15=ifelse(merged_IFM_data_continuous$IFM15>quantile(merged_IFM_data_continuous$IFM15,0.8),1,0)
+```
+
+```{r}
+# merged_MMRF_data_binary=merged_MMRF_data_continuous
+# merged_MMRF_data_binary$EMC=ifelse(merged_MMRF_data_continuous$EMC>quantile(merged_MMRF_data_continuous$EMC,0.8),1,0)
+# merged_MMRF_data_binary$EI=ifelse(merged_MMRF_data_continuous$EI>quantile(merged_MMRF_data_continuous$EI,0.8),1,0)
+# merged_MMRF_data_binary$UAMS70=ifelse(merged_MMRF_data_continuous$UAMS70>quantile(merged_MMRF_data_continuous$UAMS70,0.8),1,0)
+# merged_MMRF_data_binary$GPI=ifelse(merged_MMRF_data_continuous$GPI>quantile(merged_MMRF_data_continuous$GPI,0.9),1,0)
+# merged_MMRF_data_binary$UAMS17=ifelse(merged_MMRF_data_continuous$UAMS17>quantile(merged_MMRF_data_continuous$UAMS17,0.9),1,0)
+# merged_MMRF_data_binary$UAMS80=ifelse(merged_MMRF_data_continuous$UAMS80>quantile(merged_MMRF_data_continuous$UAMS80,0.9),1,0)
+# merged_MMRF_data_binary$HM19=ifelse(merged_MMRF_data_continuous$HM19>quantile(merged_MMRF_data_continuous$HM19,0.8),1,0)
+# merged_MMRF_data_binary$IFM15=ifelse(merged_MMRF_data_continuous$IFM15>quantile(merged_MMRF_data_continuous$IFM15,0.8),1,0)
+```
+
+```{r}
+combined_df <- bind_rows(IFM_data_continuous[,c(1:7,12)], MMRF_data_continuous[,c(1:7,12)], Gamer_data_continuous[,c(1:7,12)], UAMS_data_continuous[,c(1:7,12)])
+```
+
+```{r}
+pca <- prcomp(combined_df[1:7], center = TRUE, scale. = TRUE)
+
+# Create a dataframe with PCA results
+pca_df <- as.data.frame(pca$x)
+pca_df$dataset <- combined_df$dataset
+
+# Visualize the PCA results
+p <- ggplot(pca_df, aes(x = PC1, y = PC2, color = dataset)) +
+  geom_point(size = 1) +
+  ggtitle("PCA of Combined Datasets") +
+  xlab("Principal Component 1") +
+  ylab("Principal Component 2") +
+  theme_minimal()
+print(p)
+```
+
+```{r}
+loadings <- pca$rotation
+print(loadings)
+
+# Formulas for the first few principal components
+for (i in 1:3) {
+  cat("PC", i, " = ", sep="")
+  formula <- paste0(round(loadings[, i], 3), "*", colnames(df), collapse=" + ")
+  cat(formula, "\n")
+}
+
+# Example of the first principal component formula
+pc1_formula <- paste0(round(loadings[, 1], 3), "*", colnames(df), collapse=" + ")
+cat("PC1 = ", pc1_formula, "\n")
+```
+
+
