@@ -1,0 +1,90 @@
+---
+title: "Implementation of UAMS70"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+Get the probe set IDs and weights in the UAMS70 model
+```{r}
+library(geneClassifiers)
+UAMS70Classifier<-getClassifier("UAMS70")
+UAMS70Classifier
+weights=getWeights(UAMS70Classifier)
+weights
+probeset_id=names(weights)
+```
+
+
+Read the MMRF TPM data and standardize the expression levels
+```{r}
+library(readr)
+library(tidyr)
+library(dplyr)
+library(janitor)
+UAMS=read_csv("./UAMS_expression.csv")
+patient=UAMS[["...1"]]
+tidydata=UAMS[,names(UAMS)%in%probeset_id]
+tidydata=as.data.frame(tidydata)
+tidydata=sapply(tidydata,as.numeric )
+scaled_data=scale(tidydata)
+```
+
+Calculate the revised risk score, higher score represents higher risk
+```{r}
+score=rep(0,nrow(scaled_data))
+for (i in 1:length(weights)){
+  score=score+weights[i]*scaled_data[,names(weights)[i]]
+}
+```
+
+```{r}
+cutoff=quantile(score,0.8)
+high_risk=patient[score>=cutoff]
+low_risk=patient[score<cutoff]
+```
+
+
+
+Read in the survival data and keep only patients with risk categorization.
+```{r}
+library(readxl)
+UAMS_Survival=read_excel("./GSE24080_MM_UAMS565_ClinInfo_27Jun2008_LS_clean.xls")%>%
+  rename(subjid=CELfilename,OS=`OS (months)`,EFS=`EFS(months)`,EFS_censor=`EFS-censor`,OS_censor=`OS-censor`)
+UAMS_Survival=subset(UAMS_Survival,subjid %in% high_risk | subjid %in% low_risk)
+UAMS_Survival$risk=ifelse(UAMS_Survival$subjid %in% high_risk, 1, 0) #risk=1 represents high risk
+```
+
+```{r}
+library(survival)
+library(ggfortify)
+PFS_fit=survfit(Surv(EFS,EFS_censor) ~ risk, data = UAMS_Survival)
+autoplot(PFS_fit,main="PFS of different risk groups categorized by UAMS70")
+```
+```{r}
+survdiff(Surv(EFS,EFS_censor) ~ risk, data = UAMS_Survival)
+```
+
+```{r}
+OS_fit=survfit(Surv(OS,OS_censor) ~ risk, data = UAMS_Survival)
+autoplot(OS_fit,main="OS of different risk groups categorized by UAMS70")
+```
+```{r}
+survdiff(Surv(OS,OS_censor) ~ risk, data = UAMS_Survival)
+```
+
+```{r}
+UAMS70_score=data.frame(score)
+UAMS70_score$patient=patient
+write.csv(UAMS70_score,"UAMS70_score_UAMS.csv",row.names=F)
+```
+
