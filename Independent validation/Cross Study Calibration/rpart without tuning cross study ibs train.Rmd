@@ -184,37 +184,33 @@ IBS(with(test,Surv(time,status)),sp_matrix = test_risk_score2,IBSrange=seq(tau/k
 
 ```{R}
 UAMS=subset(UAMS,time<8000)
-variable="EMC"
 datasets=list(MMRF,IFM,UAMS,Gamer)
-ensemble=matrix(NA,4,4)
-initial=matrix(NA,4,4)
-forest=matrix(NA,4,4)
-coxph=matrix(NA,4,4)
-leaf_matrix=matrix(NA,4,4)
+# ensemble=matrix(NA,4,4)
+# initial=matrix(NA,4,4)
+# forest=matrix(NA,4,4)
+# coxph=matrix(NA,4,4)
+# leaf_matrix=matrix(NA,4,4)
 for (train_index in 1:4){
-  for (test_index in 1:4){
-    if (train_index==test_index){
-      next
-    }
+  for (test_index in train_index){
+    # if (train_index==test_index){
+    #   next
+    # }
 
-    train=drop_na(datasets[[train_index]])%>%
-      select(time,status,variable)
-    test=drop_na(datasets[[test_index]])%>%
-      select(time,status,variable)
+    train=drop_na(datasets[[train_index]])
+    test=drop_na(datasets[[test_index]])
     tau=max(train$time)
     
-    tau=max(test$time)
-    timeOfInterest=seq(tau/10,tau,tau/10)
-    baseline_model=coxph(Surv(time, status) ~., data = train, x=TRUE, y=TRUE)
-    surv_fit <- survfit(baseline_model, newdata = test, extend=TRUE)
-    predicted_probs <- summary(surv_fit, times = timeOfInterest, extend=TRUE)$surv
-    predicted_probs_matrix <- t(predicted_probs)
-    ibs_result <- integrated_brier_score(y_true=with(test,Surv(time,status)),surv=predicted_probs_matrix,times=timeOfInterest)
-
-    coxph[train_index,test_index]=ibs_result
-  }
-}
-    
+#     tau=max(test$time)
+#     timeOfInterest=seq(tau/10,tau,tau/10)
+#     baseline_model=coxph(Surv(time, status) ~., data = train, x=TRUE, y=TRUE)
+#     surv_fit <- survfit(baseline_model, newdata = test, extend=TRUE)
+#     predicted_probs <- summary(surv_fit, times = timeOfInterest, extend=TRUE)$surv
+#     predicted_probs_matrix <- t(predicted_probs)
+#     ibs_result <- integrated_brier_score(y_true=with(test,Surv(time,status)),surv=predicted_probs_matrix,times=timeOfInterest)
+# 
+#     coxph[train_index,test_index]=ibs_result
+#   }
+# }
     structure=TRUE
     model1=ranger(Surv(time, status) ~ .,data=train,num.tree=500,mtry=ncol(train)-2,splitrule = "logrank", min.node.size = 5)
     
@@ -223,7 +219,7 @@ for (train_index in 1:4){
     # seed 7305, min leaf size=11
     
     # Fit single survival tree to get initial leaf allocation
-    model_prune=rpart(Surv(time, status) ~ .,data=train,minbucket=20)
+    model_prune=rpart(Surv(time, status) ~ .,data=train,minbucket=40)
     terminal_nodes <- which(model_prune$frame$var == "<leaf>")
     f= function(node) {
       # Extract the subset of data corresponding to the leaf node
@@ -290,9 +286,12 @@ for (train_index in 1:4){
     row_event=c()
     risk_score=list()
     for (i in 1:num_leaf){
-      risk_score[[i]]=c(0)
+      risk_score[[i]]=list()
+      for (u in 1:k){
+        risk_score[[i]][[u]]=c(0)
+      }
+      # list of list, risk_score[[i]] represents ith model, and risk_score[[i]][[k]] represents risk score at kth time point
     }
-    
     
     # Cross Validation
     for (step in 1:fold){
@@ -400,21 +399,33 @@ for (train_index in 1:4){
         for (i in 1:num_leaf){
           value=chf_value_dict[[i]][[test_group[j]]]
           time=time_dict[[i]][[test_group[j]]]
-    
-          index=length(time) # find the index of the largest time value smaller than t
-          while(tau<time[index] && index>1){
-            index=index-1
+          for (u in 1:k){
+            t=tau/k*u
+            index=length(time) # find the index of the largest time value smaller than t
+            while(t<time[index] && index>1){
+              index=index-1
+            }
+            risk_score[[i]][[u]]=c(risk_score[[i]][[u]],1-exp(-value[index]))
           }
-          risk_score[[i]]=c(risk_score[[i]],1-exp(-value[index]))
-    
         }
       }
       
     }
-    
+
+    risk_score_matrix=list()
     # Remove the 0 at the beginning of each risk score
     for (i in 1:num_leaf){
-      risk_score[[i]]=risk_score[[i]][-1]
+      risk_score_matrix[[i]]=list()
+      for (u in 1:k){
+        risk_score_matrix[[i]][[u]]=risk_score[[i]][[u]][-1]
+      }
+    }
+
+    # Now risk_score is a list with length=num_leaf. The ith element of risk_score is the failure probability of each patient predicted using the tree-like model with num_leaf-i+1 leaves
+    
+    probability=list()
+    for (i in 1:num_leaf){
+      probability[[i]]=matrix(unlist(risk_score_matrix[[i]]), ncol = k,byrow = FALSE)
     }
     # Now risk_score is a list with length=num_leaf. The ith element of risk_score is the failure probability of each patient predicted using the tree-like model with num_leaf-i+1 leaves
     
@@ -425,11 +436,11 @@ for (train_index in 1:4){
     
     # Optimization of ensemble weights
     fn=function(x){
-      result=0
+      result=matrix(0,nrow=nrow(train),ncol=k)
       for (i in 1:num_leaf){
-        result=result+x[i]*risk_score[[i]]
+        result=result+x[i]*(1-probability[[i]])
       }
-      fn=cIndex(row_time,row_event,as.vector(result))[1]
+      fn=-integrated_brier_score(y_true=with(train,Surv(time,status)),surv=result,times=seq(tau/k, tau, tau/k))
       
       fn
     }
@@ -533,8 +544,6 @@ for (train_index in 1:4){
     # test$time=ifelse(test$time>landmark_tau,landmark_tau,test$time)
     # tau=landmark_tau
     tau=max(test$time)
-    # timeOfInterest = unname(quantile(c(test$time),c(.1,.25,.5,.75,.9)))
-    timeOfInterest=seq(tau/10,tau,tau/10)
     # test_predict=predict(model2, data=test)
     # chf_predict=test_predict$chf
     # test_group=rep(NA,nrow(test))
@@ -555,7 +564,7 @@ for (train_index in 1:4){
     k=10
     for (i in 1:num_leaf){
       test_risk_score[[i]]=list()
-      for (u in 1:length(timeOfInterest)){
+      for (u in 1:k){
         test_risk_score[[i]][[u]]=rep(0,nrow(test))
       }
       # list of list, risk_score[[i]] represents ith model, and risk_score[[i]][[k]] represents risk score at kth time point
@@ -565,8 +574,8 @@ for (train_index in 1:4){
       for (i in 1:num_leaf){
         value=chf_value_dict[[i]][[test_group[j]]]
         time=time_dict[[i]][[test_group[j]]]
-        for (u in 1:length(timeOfInterest)){
-          t=timeOfInterest[u]
+        for (u in 1:k){
+          t=tau/k*u
           index=length(time) # find the index of the largest time value smaller than t
           while(t<time[index] && index>1){
             index=index-1
@@ -578,27 +587,27 @@ for (train_index in 1:4){
     
     test_ibs=rep(0,num_leaf)
     for (i in 1:num_leaf){
-      test_ibs[i]=integrated_brier_score(y_true=with(test,Surv(time,status)),surv=1-matrix(unlist(test_risk_score[[i]]), ncol = length(timeOfInterest), byrow = FALSE),times=timeOfInterest)
+      test_ibs[i]=integrated_brier_score(y_true=with(test,Surv(time,status)),surv=1-matrix(unlist(test_risk_score[[i]]), ncol = k, byrow = FALSE),times=seq(tau/k, tau, tau/k))
     }
     
     result=0
     for (i in 1:num_leaf){
-      result=result+parameter[i]*matrix(unlist(test_risk_score[[i]]), ncol = length(timeOfInterest), byrow = FALSE) # calculating the ensemble risk score
+      result=result+parameter[i]*(1-matrix(unlist(test_risk_score[[i]]), ncol = k, byrow = FALSE)) # calculating the ensemble risk score
     }
     
     # print(paste("ensemble: ",IBS(with(test,Surv(time,status)),sp_matrix =result)))
     # print(paste("initial: ",test_ibs[1]))
-    ensemble[train_index,test_index]=integrated_brier_score(y_true=with(test,Surv(time,status)),surv=1-result,times=timeOfInterest)
+    ensemble[train_index,test_index]=integrated_brier_score(y_true=with(test,Surv(time,status)),surv=result,times=seq(tau/k, tau, tau/k))
     initial[train_index,test_index]=test_ibs[1]
     
     test_predict=predict(model1, data=test)
     chf_predict=test_predict$chf
     chf_predict_time=test_predict$unique.death.times
-    test_risk_score2=matrix(0,nrow=nrow(test),ncol=length(timeOfInterest))
-    
+    test_risk_score2=matrix(0,nrow=nrow(test),ncol=k)
+
     for (j in 1:nrow(test)){
-      for (u in 1:length(timeOfInterest)){
-        t=timeOfInterest[u]
+      for (u in 1:k){
+        t=tau/k*u
         index=length(chf_predict_time) # find the index of the largest time value smaller than t
         while(t<chf_predict_time[index] && index>1){
           index=index-1
@@ -606,18 +615,19 @@ for (train_index in 1:4){
         test_risk_score2[j,u]=1-exp(-chf_predict[j,index])
       }
     }
-    
+
     # print(paste("forest: ",IBS(with(test,Surv(time,status)),sp_matrix =test_risk_score2)))
     # print(paste("leaf: ",num_leaf))
-    forest[train_index,test_index]=integrated_brier_score(y_true=with(test,Surv(time,status)),surv=1-test_risk_score2,times=timeOfInterest)
-    
-    
+    forest[train_index,test_index]=integrated_brier_score(y_true=with(test,Surv(time,status)),surv=1-test_risk_score2,times=seq(tau/k, tau, tau/k))
+
+
     baseline_model=coxph(Surv(time, status) ~., data = train, x=TRUE, y=TRUE)
+    times = seq(tau/k, tau, by = tau/k)
     surv_fit <- survfit(baseline_model, newdata = test, extend=TRUE)
-    predicted_probs <- summary(surv_fit, times = timeOfInterest, extend=TRUE)$surv
+    predicted_probs <- summary(surv_fit, times = times, extend=TRUE)$surv
     predicted_probs_matrix <- t(predicted_probs)
-    ibs_result <- integrated_brier_score(y_true=with(test,Surv(time,status)),surv=predicted_probs_matrix,times=timeOfInterest)
-    # ibs_result <- pec(object = result, 
+    ibs_result <- integrated_brier_score(y_true=with(test,Surv(time,status)),surv=predicted_probs_matrix,times=seq(tau/k, tau, tau/k))
+    # ibs_result <- pec(object = result,
     #                   formula = baseline_model$formula,
     #                   data = test,
     #                   times = seq(tau/k, tau, by = tau/k),

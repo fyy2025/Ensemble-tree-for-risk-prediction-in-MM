@@ -40,10 +40,9 @@ library(rpart)
 library(treeClust)
 library(rpart)
 library(tidyr)
-library(pmcalibration)
-library(SurvMetrics)
-library(pec)
-library(survex)
+library(car)
+library(prodlim)
+library(plyr)
 ```
 
 
@@ -54,10 +53,10 @@ MMRF_data_continuous=read_csv("MMRF_8_continuous.csv")[,-2]
 MMRF=MMRF_data_continuous[,1:9]
 Gamer_data_continuous=read_csv("Gamer_7_continuous.csv")
 Gamer=Gamer_data_continuous[,c(1:7,10:11)]%>%
-  rename(time=death1,status=deathE)
+  dplyr::rename(time=death1,status=deathE)
 UAMS_data_continuous=read_csv("UAMS_8_continuous.csv")[,-2]
 UAMS=UAMS_data_continuous[,1:9]%>%
-  rename(time=OS,status=OS_censor)
+  dplyr::rename(time=OS,status=OS_censor)
 ```
 ```{r}
 IFM_binary=IFM
@@ -104,116 +103,140 @@ UAMS_binary$IFM15=ifelse(UAMS$IFM15>quantile(UAMS$IFM15,0.8),1,0)
 ```
 
 
-ICI:
+one-calibration
 ```{r}
-train=drop_na(UAMS)
-test=drop_na(Gamer)
-
-model1=ranger(Surv(time, status) ~ .,data=train,num.tree=500,mtry=ncol(train)-2,splitrule = "logrank", min.node.size = 5)
-
-test_predict=predict(model1, data=test)
-chf_predict=test_predict$chf
-chf_predict_time=test_predict$unique.death.times
-test_risk_score2=rep(0,nrow(test))
-
-tau=max(test$time)
-for (j in 1:nrow(test)){
-  index=length(chf_predict_time) # find the index of the largest time value smaller than t
-  while(tau<chf_predict_time[index] && index>1){
-    index=index-1
-  }
-  test_risk_score2[j]=1-exp(-chf_predict[j,index])
+binItUp = function(trueDeathTimes,censorStatus, predictions, type, numBuckets,timeOfInterest){
+  #We need to divide the number of predictions into as equal size buckets as possible. The formula for this can be found here:
+  #https://math.stackexchange.com/questions/199690/divide-n-items-into-m-groups-with-as-near-equal-size-as-possible
+  numberOfBucketsWithExtra = length(predictions) %% numBuckets
+  numberOfBucketsWithoutExtra = numBuckets - numberOfBucketsWithExtra
+  #We want buckets to randomly be assigned their respective number of predictions, but be consistent with the same input.
+  #E.g. for 3 buckets with size 5 and 2 buckets of size 4 we don't necasarrily want 5,5,5,4,4. We want them to be random. We use sample().
+  bucketSizes = sample(c(rep(floor(length(predictions)/numBuckets)+1, numberOfBucketsWithExtra),
+                         rep(floor(length(predictions)/numBuckets), numberOfBucketsWithoutExtra)))
+  bucketLabel = rep(1:numBuckets, times = bucketSizes)
+  
+  #We are going to put the survival probabilities into deciles so we get the order of indexs here.
+  orderPredictions = order(predictions)
+  orderedPredictionFrame = data.frame(prob = predictions[orderPredictions],
+                                      label = bucketLabel,
+                                      delta = censorStatus[orderPredictions],
+                                      time = trueDeathTimes[orderPredictions])
+  timeFrame = data.frame(time = trueDeathTimes[orderPredictions],
+                         label = bucketLabel,
+                         delta = censorStatus[orderPredictions])
+  pval = switch(type,
+                Uncensored = {
+                  #Read the following code as taking our predicted probabilities, placing them into buckets, 
+                  #taking only uncensored individuals at the time of interest and then taking their mean. All other following piping operations should
+                  #be read in a similar fashion.
+                  bucketSurvival = orderedPredictionFrame  %>%
+                    group_by(label) %>% 
+                    filter(delta ==1 | (delta ==0 & time >= timeOfInterest)) %>%
+                    summarise(survivalPrediction = mean(prob))
+                  numDied = timeFrame  %>%
+                    group_by(label) %>%
+                    filter(delta ==1| (delta ==0 & time >= timeOfInterest)) %>%
+                    summarise(deadCount = length(which(time < timeOfInterest)))
+                  observed = numDied$deadCount
+                  expected = bucketSizes*(1-bucketSurvival$survivalPrediction)
+                  HLStat = sum((observed-expected)^2/(bucketSizes*(1-bucketSurvival$survivalPrediction)*bucketSurvival$survivalPrediction))
+                  pval = 1-pchisq(HLStat, numBuckets-2)
+                },
+                #For a good discusion of this method, also known as the D'Agostino-Nam tranlation/method see
+                #Section 2.2 of this thesis paper: Hosmer-Lemeshow goodness-of-fit test: Translations to the Cox Proportional Hazards Model
+                DN = {
+                  bucketSurvival = orderedPredictionFrame  %>%
+                    group_by(label) %>%
+                    summarise(survivalPrediction = mean(prob))
+                  numDied = timeFrame  %>%
+                    group_by(label) %>%
+                    mutate(slope = (1-min(prodlim(Surv(time, delta)~1)$surv))/(0-max(time))) %>%
+                    summarise(deadCount = 1-ifelse(is.na(predict(prodlim(Surv(time, delta)~1),timeOfInterest)),max(0,1+slope*timeOfInterest),
+                                                     predict(prodlim(Surv(time, delta)~1),timeOfInterest)))
+                  observed = numDied$deadCount
+                  expected = 1-bucketSurvival$survivalPrediction
+                  HLStat = (bucketSizes[bucketSizes!=0]*(observed-expected)^2)/((1-bucketSurvival$survivalPrediction)*bucketSurvival$survivalPrediction)
+                  HLStat = sum(ifelse(is.nan(HLStat),0,HLStat))
+                  #See comments in file header for reasoning of degree of freedom choice.
+                  DoF = ifelse(numBuckets > 15, numBuckets -2, numBuckets-1)
+                  pval = 1-pchisq(HLStat, DoF)
+                })
+  return(pval)
 }
-
-baseline_model=coxph(Surv(time, status) ~., data = train)
-test_risk_score=predict(baseline_model,test,type = "survival")
-
-pmcalibration(y=with(test,Surv(time,status)),p=test_risk_score, smooth = "rcs", nk=5, ci = "pw",time=tau)
-
 ```
-IBS:
+
 ```{r}
-train=drop_na(UAMS)
-test=drop_na(Gamer)
+train=drop_na(MMRF)
+test=drop_na(IFM)
 
 model1=ranger(Surv(time, status) ~ .,data=train,num.tree=500,mtry=ncol(train)-2,splitrule = "logrank", min.node.size = 5)
+
+type="DN"
+numBuckets=10
+trueDeathTimes = test$time
+censorStatus = test$status
+timeOfInterest = unname(quantile(c(trueDeathTimes,train$time),c(.1,.25,.5,.75,.9)))
+
+baseline_model=coxph(Surv(time, status) ~., data = train, x=TRUE, y=TRUE)
+surv_fit <- survfit(baseline_model, newdata = test, extend=TRUE)
+predicted_probs <- summary(surv_fit, times = timeOfInterest, extend=TRUE)$surv
+
+pval = c()
+for(times in 1:length(timeOfInterest)){
+  #If we have multiple times of interest we need to pull out the predictions for a specific time.
+  predictionsSpecified = predicted_probs[times,]
+  pval = c(pval,binItUp(trueDeathTimes,censorStatus, predictionsSpecified, type, numBuckets,timeOfInterest[times]))
+}
+pval
 
 test_predict=predict(model1, data=test)
 chf_predict=test_predict$chf
 chf_predict_time=test_predict$unique.death.times
-test_risk_score2=rep(0,nrow(test))
+test_risk_score2=matrix(0,nrow=nrow(test),ncol=length(timeOfInterest))
 
-tau=max(test$time)
-k=10
-sp_matrix=matrix(NA,nrow=nrow(test),ncol=k)
-for (i in 1:k){
-  for (j in 1:nrow(test)){
-    t=tau/k*i
+for (j in 1:nrow(test)){
+  for (u in 1:length(timeOfInterest)){
+    t=timeOfInterest[u]
     index=length(chf_predict_time) # find the index of the largest time value smaller than t
     while(t<chf_predict_time[index] && index>1){
       index=index-1
     }
-    sp_matrix[j,i]=1-exp(-chf_predict[j,index])
+    test_risk_score2[j,u]=exp(-chf_predict[j,index])
   }
 }
 
-baseline_model=coxph(Surv(time, status) ~., data = train)
-test_risk_score=predict(baseline_model,test,type = "survival")
-
-IBS(with(test,Surv(time,status)),sp_matrix = sp_matrix)
-
-test_predict=predict(model1, data=test)
-chf_predict=test_predict$chf
-chf_predict_time=test_predict$unique.death.times
-test_risk_score2=matrix(0,nrow=nrow(test),ncol=k)
-
-for (j in 1:nrow(test)){
-  for (u in 1:k){
-    t=tau/k*u
-    index=length(chf_predict_time) # find the index of the largest time value smaller than t
-    while(t<chf_predict_time[index] && index>1){
-      index=index-1
-    }
-    test_risk_score2[j,u]=1-exp(-chf_predict[j,index])
-  }
+predicted_probs=t(test_risk_score2)
+  
+pval = c()
+for(times in 1:length(timeOfInterest)){
+  #If we have multiple times of interest we need to pull out the predictions for a specific time.
+  predictionsSpecified = predicted_probs[times,]
+  pval = c(pval,binItUp(trueDeathTimes,censorStatus, predictionsSpecified, type, numBuckets,timeOfInterest[times]))
 }
-
-IBS(with(test,Surv(time,status)),sp_matrix = test_risk_score2,IBSrange=seq(tau/k, tau, tau/k))
+pval
 ```
+
 
 
 ```{R}
 UAMS=subset(UAMS,time<8000)
-variable="EMC"
 datasets=list(MMRF,IFM,UAMS,Gamer)
-ensemble=matrix(NA,4,4)
-initial=matrix(NA,4,4)
-forest=matrix(NA,4,4)
-coxph=matrix(NA,4,4)
-leaf_matrix=matrix(NA,4,4)
+# ensemble=matrix(NA,4,4)
+# initial=matrix(NA,4,4)
+# forest=matrix(NA,4,4)
+# coxph=matrix(NA,4,4)
+# leaf_matrix=matrix(NA,4,4)
 for (train_index in 1:4){
   for (test_index in 1:4){
-    if (train_index==test_index){
-      next
-    }
+    # if (train_index==test_index){
+    #   next
+    # }
 
-    train=drop_na(datasets[[train_index]])%>%
-      select(time,status,variable)
-    test=drop_na(datasets[[test_index]])%>%
-      select(time,status,variable)
+    train=drop_na(datasets[[train_index]])
+    test=drop_na(datasets[[test_index]])
     tau=max(train$time)
     
-    tau=max(test$time)
-    timeOfInterest=seq(tau/10,tau,tau/10)
-    baseline_model=coxph(Surv(time, status) ~., data = train, x=TRUE, y=TRUE)
-    surv_fit <- survfit(baseline_model, newdata = test, extend=TRUE)
-    predicted_probs <- summary(surv_fit, times = timeOfInterest, extend=TRUE)$surv
-    predicted_probs_matrix <- t(predicted_probs)
-    ibs_result <- integrated_brier_score(y_true=with(test,Surv(time,status)),surv=predicted_probs_matrix,times=timeOfInterest)
-
-    coxph[train_index,test_index]=ibs_result
-  }
-}
     
     structure=TRUE
     model1=ranger(Surv(time, status) ~ .,data=train,num.tree=500,mtry=ncol(train)-2,splitrule = "logrank", min.node.size = 5)
@@ -223,7 +246,7 @@ for (train_index in 1:4){
     # seed 7305, min leaf size=11
     
     # Fit single survival tree to get initial leaf allocation
-    model_prune=rpart(Surv(time, status) ~ .,data=train,minbucket=20)
+    model_prune=rpart(Surv(time, status) ~ .,data=train,minbucket=5)
     terminal_nodes <- which(model_prune$frame$var == "<leaf>")
     f= function(node) {
       # Extract the subset of data corresponding to the leaf node
@@ -533,8 +556,6 @@ for (train_index in 1:4){
     # test$time=ifelse(test$time>landmark_tau,landmark_tau,test$time)
     # tau=landmark_tau
     tau=max(test$time)
-    # timeOfInterest = unname(quantile(c(test$time),c(.1,.25,.5,.75,.9)))
-    timeOfInterest=seq(tau/10,tau,tau/10)
     # test_predict=predict(model2, data=test)
     # chf_predict=test_predict$chf
     # test_group=rep(NA,nrow(test))
@@ -551,80 +572,152 @@ for (train_index in 1:4){
     #     }
     #   }
     # }
-    test_risk_score=list()
-    k=10
-    for (i in 1:num_leaf){
-      test_risk_score[[i]]=list()
-      for (u in 1:length(timeOfInterest)){
-        test_risk_score[[i]][[u]]=rep(0,nrow(test))
-      }
-      # list of list, risk_score[[i]] represents ith model, and risk_score[[i]][[k]] represents risk score at kth time point
+    numBins=10
+    baseline_model=coxph(Surv(time, status) ~., data = train, x=TRUE, y=TRUE)
+    surv_fit <- survfit(baseline_model, newdata = test, extend=TRUE)
+    deathProbabilities=rep(0,nrow(test))
+    censorStatus=test$status
+    quantiles = 1 - seq(0,1,length.out = numBins+1)
+    for (i in 1:nrow(test)){
+      deathProbabilities[i] <- summary(surv_fit, times = test$time[i], extend=TRUE)$surv[i]
     }
     
+    uncensoredProbabilities = deathProbabilities[as.logical(censorStatus)]
+    binIndex = seq_along(quantiles)[-1]
+    uncensoredBinning = unlist(lapply(binIndex, function(x) length(which(uncensoredProbabilities >= quantiles[x] &
+                                                                           uncensoredProbabilities < quantiles[x-1]))))
+    censoredProbabilities = deathProbabilities[as.logical(1-censorStatus)]
+    if(length(censoredProbabilities) >0){
+      censoredBinPositions = sindex(quantiles,censoredProbabilities, comp = "greater", strict = T)
+      #Sometimes the probability will be 1 in which case we just want to put them in the first bin. 
+      censoredBinPositions = ifelse(censoredBinPositions ==0, 1,censoredBinPositions)
+      quantileWidth = 1/numBins
+      firstBin = ifelse(censoredBinPositions == numBins,1,(censoredProbabilities - quantiles[censoredBinPositions+1])/censoredProbabilities)
+      restOfBins = ifelse(censoredProbabilities ==0,1,1/(numBins*censoredProbabilities))
+      
+      listOfContributions = lapply(seq_along(censoredBinPositions),function(x) c(rep(0, censoredBinPositions[x] -1),
+                                                                                 rep(firstBin[x],1),
+                                                                                 rep(restOfBins[x], numBins - censoredBinPositions[x])))
+      censoredBinning = colSums(ldply(listOfContributions,rbind)) 
+    } else censoredBinning = 0
+    
+    combinedBins = uncensoredBinning + censoredBinning
+    names(combinedBins) = quantiles[-length(quantiles)]
+    coxph[train_index,test_index]=chisq.test(combinedBins)$p.value
+    
+    
+    # death prob for initial tree
+    test_risk_score=list()
+    for (i in 1:num_leaf){
+      test_risk_score[[i]]=rep(NA,nrow(test))
+    }
     for (j in 1:nrow(test)){
+      t=test$time[j]
       for (i in 1:num_leaf){
         value=chf_value_dict[[i]][[test_group[j]]]
         time=time_dict[[i]][[test_group[j]]]
-        for (u in 1:length(timeOfInterest)){
-          t=timeOfInterest[u]
-          index=length(time) # find the index of the largest time value smaller than t
-          while(t<time[index] && index>1){
-            index=index-1
-          }
-          test_risk_score[[i]][[u]][j]=1-exp(-value[index])
+        
+        index=length(time) # find the index of the largest time value smaller than t
+        while(t<time[index] && index>1){
+          index=index-1
         }
+        test_risk_score[[i]][j]=exp(-value[index])
+        
       }
+      
     }
     
-    test_ibs=rep(0,num_leaf)
-    for (i in 1:num_leaf){
-      test_ibs[i]=integrated_brier_score(y_true=with(test,Surv(time,status)),surv=1-matrix(unlist(test_risk_score[[i]]), ncol = length(timeOfInterest), byrow = FALSE),times=timeOfInterest)
-    }
+    deathProbabilities=test_risk_score[[1]]
+    uncensoredProbabilities = deathProbabilities[as.logical(censorStatus)]
+    binIndex = seq_along(quantiles)[-1]
+    uncensoredBinning = unlist(lapply(binIndex, function(x) length(which(uncensoredProbabilities >= quantiles[x] &
+                                                                           uncensoredProbabilities < quantiles[x-1]))))
+    censoredProbabilities = deathProbabilities[as.logical(1-censorStatus)]
+    if(length(censoredProbabilities) >0){
+      censoredBinPositions = sindex(quantiles,censoredProbabilities, comp = "greater", strict = T)
+      #Sometimes the probability will be 1 in which case we just want to put them in the first bin. 
+      censoredBinPositions = ifelse(censoredBinPositions ==0, 1,censoredBinPositions)
+      quantileWidth = 1/numBins
+      firstBin = ifelse(censoredBinPositions == numBins,1,(censoredProbabilities - quantiles[censoredBinPositions+1])/censoredProbabilities)
+      restOfBins = ifelse(censoredProbabilities ==0,1,1/(numBins*censoredProbabilities))
+      
+      listOfContributions = lapply(seq_along(censoredBinPositions),function(x) c(rep(0, censoredBinPositions[x] -1),
+                                                                                 rep(firstBin[x],1),
+                                                                                 rep(restOfBins[x], numBins - censoredBinPositions[x])))
+      censoredBinning = colSums(ldply(listOfContributions,rbind)) 
+    } else censoredBinning = 0
+    
+    combinedBins = uncensoredBinning + censoredBinning
+    names(combinedBins) = quantiles[-length(quantiles)]
+    initial[train_index,test_index]=chisq.test(combinedBins)$p.value
     
     result=0
     for (i in 1:num_leaf){
-      result=result+parameter[i]*matrix(unlist(test_risk_score[[i]]), ncol = length(timeOfInterest), byrow = FALSE) # calculating the ensemble risk score
+      result=result+parameter[i]*test_risk_score[[i]] # calculating the ensemble risk score
     }
     
-    # print(paste("ensemble: ",IBS(with(test,Surv(time,status)),sp_matrix =result)))
-    # print(paste("initial: ",test_ibs[1]))
-    ensemble[train_index,test_index]=integrated_brier_score(y_true=with(test,Surv(time,status)),surv=1-result,times=timeOfInterest)
-    initial[train_index,test_index]=test_ibs[1]
+    deathProbabilities=result
+    uncensoredProbabilities = deathProbabilities[as.logical(censorStatus)]
+    binIndex = seq_along(quantiles)[-1]
+    uncensoredBinning = unlist(lapply(binIndex, function(x) length(which(uncensoredProbabilities >= quantiles[x] &
+                                                                           uncensoredProbabilities < quantiles[x-1]))))
+    censoredProbabilities = deathProbabilities[as.logical(1-censorStatus)]
+    if(length(censoredProbabilities) >0){
+      censoredBinPositions = sindex(quantiles,censoredProbabilities, comp = "greater", strict = T)
+      #Sometimes the probability will be 1 in which case we just want to put them in the first bin. 
+      censoredBinPositions = ifelse(censoredBinPositions ==0, 1,censoredBinPositions)
+      quantileWidth = 1/numBins
+      firstBin = ifelse(censoredBinPositions == numBins,1,(censoredProbabilities - quantiles[censoredBinPositions+1])/censoredProbabilities)
+      restOfBins = ifelse(censoredProbabilities ==0,1,1/(numBins*censoredProbabilities))
+      
+      listOfContributions = lapply(seq_along(censoredBinPositions),function(x) c(rep(0, censoredBinPositions[x] -1),
+                                                                                 rep(firstBin[x],1),
+                                                                                 rep(restOfBins[x], numBins - censoredBinPositions[x])))
+      censoredBinning = colSums(ldply(listOfContributions,rbind)) 
+    } else censoredBinning = 0
+    
+    combinedBins = uncensoredBinning + censoredBinning
+    names(combinedBins) = quantiles[-length(quantiles)]
+    ensemble[train_index,test_index]=chisq.test(combinedBins)$p.value
     
     test_predict=predict(model1, data=test)
     chf_predict=test_predict$chf
     chf_predict_time=test_predict$unique.death.times
-    test_risk_score2=matrix(0,nrow=nrow(test),ncol=length(timeOfInterest))
+    test_risk_score2=matrix(0,nrow=nrow(test),ncol=k)
     
     for (j in 1:nrow(test)){
-      for (u in 1:length(timeOfInterest)){
-        t=timeOfInterest[u]
-        index=length(chf_predict_time) # find the index of the largest time value smaller than t
-        while(t<chf_predict_time[index] && index>1){
-          index=index-1
-        }
-        test_risk_score2[j,u]=1-exp(-chf_predict[j,index])
+      t=test$time[j]
+      index=length(chf_predict_time) # find the index of the largest time value smaller than t
+      while(t<chf_predict_time[index] && index>1){
+        index=index-1
       }
+      test_risk_score2[j]=exp(-chf_predict[j,index])
     }
     
-    # print(paste("forest: ",IBS(with(test,Surv(time,status)),sp_matrix =test_risk_score2)))
-    # print(paste("leaf: ",num_leaf))
-    forest[train_index,test_index]=integrated_brier_score(y_true=with(test,Surv(time,status)),surv=1-test_risk_score2,times=timeOfInterest)
+    deathProbabilities=test_risk_score2
+    uncensoredProbabilities = deathProbabilities[as.logical(censorStatus)]
+    binIndex = seq_along(quantiles)[-1]
+    uncensoredBinning = unlist(lapply(binIndex, function(x) length(which(uncensoredProbabilities >= quantiles[x] &
+                                                                           uncensoredProbabilities < quantiles[x-1]))))
+    censoredProbabilities = deathProbabilities[as.logical(1-censorStatus)]
+    if(length(censoredProbabilities) >0){
+      censoredBinPositions = sindex(quantiles,censoredProbabilities, comp = "greater", strict = T)
+      #Sometimes the probability will be 1 in which case we just want to put them in the first bin. 
+      censoredBinPositions = ifelse(censoredBinPositions ==0, 1,censoredBinPositions)
+      quantileWidth = 1/numBins
+      firstBin = ifelse(censoredBinPositions == numBins,1,(censoredProbabilities - quantiles[censoredBinPositions+1])/censoredProbabilities)
+      restOfBins = ifelse(censoredProbabilities ==0,1,1/(numBins*censoredProbabilities))
+      
+      listOfContributions = lapply(seq_along(censoredBinPositions),function(x) c(rep(0, censoredBinPositions[x] -1),
+                                                                                 rep(firstBin[x],1),
+                                                                                 rep(restOfBins[x], numBins - censoredBinPositions[x])))
+      censoredBinning = colSums(ldply(listOfContributions,rbind)) 
+    } else censoredBinning = 0
     
+    combinedBins = uncensoredBinning + censoredBinning
+    names(combinedBins) = quantiles[-length(quantiles)]
+    forest[train_index,test_index]=chisq.test(combinedBins)$p.value
     
-    baseline_model=coxph(Surv(time, status) ~., data = train, x=TRUE, y=TRUE)
-    surv_fit <- survfit(baseline_model, newdata = test, extend=TRUE)
-    predicted_probs <- summary(surv_fit, times = timeOfInterest, extend=TRUE)$surv
-    predicted_probs_matrix <- t(predicted_probs)
-    ibs_result <- integrated_brier_score(y_true=with(test,Surv(time,status)),surv=predicted_probs_matrix,times=timeOfInterest)
-    # ibs_result <- pec(object = result, 
-    #                   formula = baseline_model$formula,
-    #                   data = test,
-    #                   times = seq(tau/k, tau, by = tau/k),
-    #                   cens.model = "cox",
-    #                   exact = TRUE)
-    #print(paste("coxph: ",crps(ibs_result)[2]))
-    coxph[train_index,test_index]=ibs_result
     leaf_matrix[train_index,test_index]=num_leaf
   }
 }
