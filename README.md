@@ -14,19 +14,19 @@ The folder contains csv files for respective risk scores obtained from risk pred
 
 - The `risk score data experiment.Rmd` file contains example code for applying ensemble method on the data frame containing risk scores and survival outcome. The main functions used are listed below:
   
--- The ranger() function from the Ranger package is used to the initial train decision tree. 
+  - The ranger() function from the Ranger package is used to the initial train decision tree. 
 
--- The pairwise_survdiff() function from the Survminer package is used to perform pairwise log-rank tests to find the nearest leaf nodes.
+  - The pairwise_survdiff() function from the Survminer package is used to perform pairwise log-rank tests to find the nearest leaf nodes.
 
--- The survfit() function from the Survival package is used to fit Nelson-Aalen esimators for each combined leaf node.
+  - The survfit() function from the Survival package is used to fit Nelson-Aalen esimators for each combined leaf node.
 
--- The cIndex() function from the Intsurv package is used to compute the concordence index of our tree-based models.
+  - The cIndex() function from the Intsurv package is used to compute the concordence index of our tree-based models.
 
--- The constrOptim.nl() function from the Alabama package is used to find the optimal ensemble weights for the ensemble tree-like model.
+  - The constrOptim.nl() function from the Alabama package is used to find the optimal ensemble weights for the ensemble tree-like model.
 
--- The `risk score data experiment bootstrap.Rmd` file runs 500 bootstapping simulations to compare model performance on different datasets (continuous score and binary class).
+- The `risk score data experiment bootstrap.Rmd` file runs 500 bootstapping simulations to compare model performance on different datasets (continuous score and binary class).
 
--- The `risk score data experiment with pruning.Rmd` file runs 500 bootstapping simulations to explore performance of ensemble model on pruned trees (using rpart package).
+- The `risk score data experiment with pruning.Rmd` file runs 500 bootstapping simulations to explore performance of ensemble model on pruned trees (using rpart package).
 
 ## Optimal initial tree
 
