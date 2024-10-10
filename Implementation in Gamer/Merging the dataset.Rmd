@@ -1,0 +1,117 @@
+---
+title: "real data analysis experiment"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+library(intsurv)
+library(survminer)
+library(survival)
+library(readr)
+library(randomForestSRC)
+library(ranger)
+library(alabama)
+library(dplyr)
+```
+
+```{r}
+EMC_score=read.csv("./EMC92_score_Gamer.csv")
+# EI_score=read.csv("./EI_OS_score_Gamer.csv")
+UAMS_score=read.csv("./UAMS70_score_Gamer.csv")
+GPI_score=read.csv("./GPI_score_Gamer.csv")
+```
+
+```{r}
+merged=EMC_score%>%
+  rename(EMC=score)%>%
+  # merge(EMC_score,EI_score,by="patient")%>%
+  # rename(EMC=score,EI=OS_score)%>%
+  merge(UAMS_score,by="patient")%>%
+  rename(UAMS70=score)%>%
+  merge(GPI_score,by="patient")%>%
+  rename(GPI=score)
+```
+
+
+```{r}
+Gamer_Survival=read_csv("./Gamer_Survival.csv")%>%
+  rename(patient=NumInterne)%>%
+  dplyr::select(patient,relapse1,relapseE,death1,deathE)
+
+Gamer_Survival$relapse1=Gamer_Survival$relapse1*30
+Gamer_Survival$death1=Gamer_Survival$death1*30
+```
+
+```{r}
+merged_data=merge(merged,Gamer_Survival,by="patient")
+patient_ID=merged_data$patient
+merged_data_Gamer=merged_data[,-1]
+#write_csv(merged_data_Gamer,"./merged_Gamer_data_continuous_pfs.csv")
+```
+
+```{r}
+UAMS17_score=read.csv("./UAMS17_score_Gamer.csv")
+UAMS80_score=read.csv("./UAMS80_score_Gamer.csv")
+HM19_score=read.csv("./HM19_score_Gamer.csv")
+IFM15_score=read.csv("./IFM15_score_Gamer.csv")
+```
+
+```{r}
+merged2=merge(merged,UAMS17_score,by="patient")%>%
+  rename(UAMS17=score)%>%
+  merge(UAMS80_score,by="patient")%>%
+  rename(UAMS80=score)%>%
+  merge(HM19_score,by="patient")%>%
+  rename(HM19=score)%>%
+  merge(IFM15_score,by="patient")%>%
+  rename(IFM15=score)
+```
+
+```{r}
+merged_data2=merge(merged2,Gamer_Survival,by="patient")
+patient_ID=merged_data2$patient
+merged_data_Gamer2=merged_data2[,-1]
+write_csv(merged_data_Gamer2,"./Gamer_7_continuous.csv")
+```
+
+```{r}
+del17p=read_csv("./DNA\ markers/cohort_export_baseline_del17p.csv")
+delCDKN2C=read_csv("./DNA\ markers/cohort_export_baseline_delCDKN2C.csv")
+gain1q21=read_csv("./DNA\ markers/cohort_export_baseline_gain1q21.csv")
+delt414=read_csv("./DNA\ markers/cohort_export_baseline_t414.csv")
+delt1416=read_csv("./DNA\ markers/cohort_export_baseline_t1416.csv")
+```
+
+
+```{r}
+cor(merged_data_Gamer2[,1:8])
+```
+```{r}
+UAMS=merged_data2
+hist(UAMS$TTRelpase)
+```
+
