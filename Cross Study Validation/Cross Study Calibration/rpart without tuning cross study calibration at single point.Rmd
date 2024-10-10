@@ -1,0 +1,1218 @@
+---
+title: "real data analysis experiment"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+library(intsurv)
+library(survminer)
+library(survival)
+library(readr)
+library(randomForestSRC)
+library(ranger)
+library(alabama)
+library(dplyr)
+library(rpart)
+library(treeClust)
+library(rpart)
+library(tidyr)
+library(pmcalibration)
+library(SurvMetrics)
+library(pseudo)
+library(car)
+library(geepack)
+library(aod)
+library(corpcor)
+library(KMsurv)
+library(rms)
+```
+
+
+```{r}
+IFM_data_continuous=read_csv("IFM_8_continuous.csv")[,-2]
+IFM=IFM_data_continuous[,1:9]
+MMRF_data_continuous=read_csv("MMRF_8_continuous.csv")[,-2]
+MMRF=MMRF_data_continuous[,1:9]
+Gamer_data_continuous=read_csv("Gamer_7_continuous.csv")
+Gamer=Gamer_data_continuous[,c(1:7,10:11)]%>%
+  rename(time=death1,status=deathE)
+UAMS_data_continuous=read_csv("UAMS_8_continuous.csv")[,-2]
+UAMS=UAMS_data_continuous[,1:9]%>%
+  rename(time=OS,status=OS_censor)
+```
+```{r}
+IFM_binary=IFM
+IFM_binary$EMC=ifelse(IFM$EMC>quantile(IFM$EMC,0.8),1,0)
+IFM_binary$UAMS70=ifelse(IFM$UAMS70>quantile(IFM$UAMS70,0.8),1,0)
+IFM_binary$GPI=ifelse(IFM$GPI>quantile(IFM$GPI,0.9),1,0)
+IFM_binary$UAMS17=ifelse(IFM$UAMS17>quantile(IFM$UAMS17,0.9),1,0)
+IFM_binary$UAMS80=ifelse(IFM$UAMS80>quantile(IFM$UAMS80,0.9),1,0)
+IFM_binary$HM19=ifelse(IFM$HM19>quantile(IFM$HM19,0.8),1,0)
+IFM_binary$IFM15=ifelse(IFM$IFM15>quantile(IFM$IFM15,0.8),1,0)
+```
+
+```{r}
+MMRF_binary=MMRF
+MMRF_binary$EMC=ifelse(MMRF$EMC>quantile(MMRF$EMC,0.8),1,0)
+MMRF_binary$UAMS70=ifelse(MMRF$UAMS70>quantile(MMRF$UAMS70,0.8),1,0)
+MMRF_binary$GPI=ifelse(MMRF$GPI>quantile(MMRF$GPI,0.9),1,0)
+MMRF_binary$UAMS17=ifelse(MMRF$UAMS17>quantile(MMRF$UAMS17,0.9),1,0)
+MMRF_binary$UAMS80=ifelse(MMRF$UAMS80>quantile(MMRF$UAMS80,0.9),1,0)
+MMRF_binary$HM19=ifelse(MMRF$HM19>quantile(MMRF$HM19,0.8),1,0)
+MMRF_binary$IFM15=ifelse(MMRF$IFM15>quantile(MMRF$IFM15,0.8),1,0)
+```
+
+```{r}
+Gamer_binary=Gamer
+Gamer_binary$EMC=ifelse(Gamer$EMC>quantile(Gamer$EMC,0.8),1,0)
+Gamer_binary$UAMS70=ifelse(Gamer$UAMS70>quantile(Gamer$UAMS70,0.8),1,0)
+Gamer_binary$GPI=ifelse(Gamer$GPI>quantile(Gamer$GPI,0.9),1,0)
+Gamer_binary$UAMS17=ifelse(Gamer$UAMS17>quantile(Gamer$UAMS17,0.9),1,0)
+Gamer_binary$UAMS80=ifelse(Gamer$UAMS80>quantile(Gamer$UAMS80,0.9),1,0)
+Gamer_binary$HM19=ifelse(Gamer$HM19>quantile(Gamer$HM19,0.8),1,0)
+Gamer_binary$IFM15=ifelse(Gamer$IFM15>quantile(Gamer$IFM15,0.8),1,0)
+```
+
+```{r}
+UAMS_binary=UAMS
+UAMS_binary$EMC=ifelse(UAMS$EMC>quantile(UAMS$EMC,0.8),1,0)
+UAMS_binary$UAMS70=ifelse(UAMS$UAMS70>quantile(UAMS$UAMS70,0.8),1,0)
+UAMS_binary$GPI=ifelse(UAMS$GPI>quantile(UAMS$GPI,0.9),1,0)
+UAMS_binary$UAMS17=ifelse(UAMS$UAMS17>quantile(UAMS$UAMS17,0.9),1,0)
+UAMS_binary$UAMS80=ifelse(UAMS$UAMS80>quantile(UAMS$UAMS80,0.9),1,0)
+UAMS_binary$HM19=ifelse(UAMS$HM19>quantile(UAMS$HM19,0.8),1,0)
+UAMS_binary$IFM15=ifelse(UAMS$IFM15>quantile(UAMS$IFM15,0.8),1,0)
+```
+
+```{r}
+data(bmt)
+names(bmt)[c(1,3:6,13,20)] <- c("disease", "tdfs", "relapse", "trm", "dfs", "age","fab")
+bmt$disease <- as.factor(bmt$disease)
+cutoffs <- c(50,105,170,280,530)
+pseudo <- pseudosurv(bmt$tdfs, bmt$dfs, tmax=cutoffs)$pseudo
+a=cbind(bmt,pseudo)
+a[order(a$t1),]
+b <- NULL
+for(j in 1:ncol(pseudo)){
+  b <- rbind(b,cbind(bmt,pseudo=pseudo[,j], tpseudo=cutoffs[j],id=1:nrow(bmt)))
+}
+b <- b[order(b$id),]
+library(geepack)
+b$tpseudo <- as.factor(b$tpseudo)
+b$ipseudo <- 1-b$pseudo
+summary(fit <- geese(ipseudo ~ tpseudo + disease + fab + age, data = b,        id=id, scale.fix=TRUE, family=gaussian, mean.link = "cloglog",corstr="independence"))
+```
+
+
+calibration at large
+```{r}
+train=drop_na(MMRF)
+test=drop_na(Gamer)
+
+model1=ranger(Surv(time, status) ~ .,data=train,num.tree=500,mtry=ncol(train)-2,splitrule = "logrank", min.node.size = 5)
+
+test_predict=predict(model1, data=test)
+chf_predict=test_predict$chf
+chf_predict_time=test_predict$unique.death.times
+test_risk_score2=rep(0,nrow(test))
+
+tau=max(test$time)
+for (j in 1:nrow(test)){
+  index=length(chf_predict_time) # find the index of the largest time value smaller than t
+  while(tau<chf_predict_time[index] && index>1){
+    index=index-1
+  }
+  test_risk_score2[j]=1-exp(-chf_predict[j,index])
+}
+
+k=10
+baseline_model=coxph(Surv(time, status) ~., data = train, x=TRUE, y=TRUE)
+times = tau
+surv_fit <- survfit(baseline_model, newdata = test)
+summary_fit=summary(surv_fit, times = times, extend=TRUE)
+predicted_probs <- summary_fit$surv
+
+fit=survfit(Surv(time,status)~1,data=test)
+# pseudo_observation=1-pseudosurv(time=test$time,event=test$status,tmax=summary_fit$time)$pseudo
+pseudo_cumhaz=pseudo(survfit(Surv(time, status) ~ 1, data=test),times=tau,type="cumhaz")
+
+test_new=cbind(test,pseudo_cumhaz)
+test_new$id=1:nrow(test_new)
+
+long_data=test_new 
+long_data$risk_score=c(predicted_probs)
+long_data$log_hazard=log(-log(1-long_data$risk_score))
+long_data=subset(long_data,abs(pseudo_cumhaz)<5)
+long_data$pseudo_risk=1-exp(-long_data$pseudo_cumhaz)
+
+geese_fit <- geese(as.formula(pseudo_risk ~ log_hazard) , id=id, data = long_data, scale.fix=TRUE, family=gaussian, mean.link = "cloglog", corstr="independence")
+
+coef_estimates <- geese_fit$beta
+cov_matrix <- geese_fit$vbeta
+
+intercept_terms <- names(coef_estimates)
+hyp_matrix <- diag(length(intercept_terms))
+rownames(hyp_matrix) <- names(coef_estimates)[intercept_terms]
+# 
+# wald_test <- wald.test(Sigma = cov_matrix, b = coef_estimates, L = hyp_matrix)
+L <- matrix(c(1, 0, 0, 1), nrow = 2, byrow = TRUE)
+hypothesis_vector <- c(0, 1)
+
+wald_statistic <- t(L %*% coef_estimates - hypothesis_vector) %*% solve(L %*% cov_matrix %*% t(L)) %*% (L %*% coef_estimates - hypothesis_vector)
+df <- length(coef_estimates)
+p_value <- 1 - pchisq(wald_statistic, df)
+```
+
+```{r}
+train=drop_na(MMRF)
+test=drop_na(MMRF)
+
+model1=ranger(Surv(time, status) ~ .,data=train,num.tree=500,mtry=ncol(train)-2,splitrule = "logrank", min.node.size = 5)
+
+test_predict=predict(model1, data=test)
+chf_predict=test_predict$chf
+chf_predict_time=test_predict$unique.death.times
+test_risk_score2=rep(0,nrow(test))
+
+tau=max(test$time)
+for (j in 1:nrow(test)){
+  index=length(chf_predict_time) # find the index of the largest time value smaller than t
+  while(tau<chf_predict_time[index] && index>1){
+    index=index-1
+  }
+  test_risk_score2[j]=1-exp(-chf_predict[j,index])
+}
+
+k=10
+baseline_model=coxph(Surv(time, status) ~., data = train, x=TRUE, y=TRUE)
+surv_fit <- survfit(baseline_model, newdata = test)
+summary_fit=summary(surv_fit, times = times, extend=TRUE)
+predicted_probs <- summary_fit$surv
+
+fit=survfit(Surv(time,status)~1,data=test)
+
+pseudo=pseudosurv(time=test$time,event=test$status,tmax=times)$pseudo
+long_data=test
+
+long_data$pseudo=pseudo
+long_data$ipseudo=1-long_data$pseudo
+long_data$id=1:nrow(long_data)
+
+long_data$risk_score=c(predicted_probs)
+long_data$log_hazard=log(-log(1-long_data$risk_score))
+
+long_data=subset(long_data, abs(ipseudo)<3)
+
+geese_fit <- geese(as.formula(ipseudo ~ offset(log_hazard)) , id=id, data = long_data, scale.fix=TRUE, family=gaussian, mean.link = "cloglog", corstr="independence")
+
+coef_estimates=geese_fit$beta
+cov_matrix=geese_fit$vbeta
+    
+intercept_terms <- names(coef_estimates)
+hyp_matrix <- diag(length(intercept_terms))
+rownames(hyp_matrix) <- names(coef_estimates)[intercept_terms]
+
+L=hyp_matrix
+
+wald_statistic <- t(L %*% coef_estimates) %*% pseudoinverse(L %*% cov_matrix %*% t(L)) %*% (L %*% coef_estimates)
+```
+
+
+```{R}
+UAMS=subset(UAMS,time<8000)
+datasets=list(MMRF,IFM,UAMS,Gamer)
+# ensemble=matrix(NA,4,4)
+# initial=matrix(NA,4,4)
+# forest=matrix(NA,4,4)
+# coxph=matrix(NA,4,4)
+# leaf_matrix=matrix(NA,4,4)
+
+times = 365*5
+for (train_index in 4:4){
+  for (test_index in 3:4){
+    if (train_index==test_index){
+      next
+    }
+    
+    k=10
+    train=drop_na(datasets[[train_index]])
+    test=drop_na(datasets[[test_index]])
+    tau=max(train$time)
+    structure=TRUE
+    model1=ranger(Surv(time, status) ~ .,data=train,num.tree=500,mtry=ncol(train)-2,splitrule = "logrank", min.node.size = 5)
+    
+    # set.seed(109) 
+    # seed 109, num_leaf=4, min leaf size=13
+    # seed 7305, min leaf size=11
+    
+    # Fit single survival tree to get initial leaf allocation
+    model_prune=rpart(Surv(time, status) ~ .,data=train,minbucket=20)
+    terminal_nodes <- which(model_prune$frame$var == "<leaf>")
+    f= function(node) {
+      # Extract the subset of data corresponding to the leaf node
+      node_data <- train[model_prune$where == as.numeric(node), ]
+      
+      # Fit a survival model to the data in the node
+      node_fit <- survfit(Surv(time, status) ~ 1, type="fleming-harrington", data = node_data)
+      
+      # Extract the cumulative hazard function
+      chf <- cumsum(node_fit$n.event / node_fit$n.risk)
+      data.frame(time = node_fit$time, chf = node_fit$cumhaz)
+    }
+    chf_list=lapply(terminal_nodes,f)
+    
+    group=rep(0,nrow(train))
+    for (i in 1:nrow(train)){
+      group[i]=which(terminal_nodes==model_prune$where[i])
+    }
+    group=unname(group)
+    chf_value_dict=list() # a list of lists of chf values
+    time_dict=list() # a list of lists of time points
+    # We now make sure every leaf has at least 2 observations, otherwise the tree structure might not pertain in 10-fold cross validation. For leaves with 1 or 2 observations, we randomly combine this leaf with another leaf.
+    leaf_size=as.vector(table(group))
+    single_leaf=as.vector(which(leaf_size<=2))
+    normal_leaf=as.vector(which(leaf_size>2))
+    
+    reassign_dict=as.vector(1:length(terminal_nodes))
+    for (i in 1:length(single_leaf)){
+      new_assignment=sample(normal_leaf,1)
+      group[which(group==single_leaf[i])]=new_assignment
+      reassign_dict[single_leaf[i]]=new_assignment
+    }
+    
+    # change the group from 1 3 4 5 to 1 2 3 4 after combining leaves
+    num_leaf=length(table(group))
+    loose_group=as.numeric(names(table(group)))
+    for (i in 1:length(group)){
+      group[i]=which(loose_group==group[i])
+    }
+    for (i in 1:length(terminal_nodes)){
+      reassign_dict[i]=which(loose_group==reassign_dict[i])
+    }
+    
+    num_leaf=length(table(group))
+    
+    # keep the first group allocation for CV
+    first_group=group
+    
+    # 10-fold cross validation
+    if (min(table(group))>=2){ # condition automatically fulfilled from the recombining step
+      fold=10
+      sampleframe = rep(1:fold, ceiling( nrow(train)/fold ) )
+      CV_index=sample(sampleframe,nrow(train) ,  replace=FALSE )
+      # CV_index=rep(1:10,nrow(train)/10)
+      CV_losses=list()
+    }else{
+      fold=nrow(train)
+      CV_index=1:nrow(train)
+      CV_losses=list()
+    }
+    
+    # Store the time, event data for calculating test c index
+    row_time=c()
+    row_event=c()
+    risk_score=list()
+    for (i in 1:num_leaf){
+      risk_score[[i]]=c(0)
+    }
+    
+    
+    # Cross Validation
+    for (step in 1:fold){
+      CV_test=train[CV_index==step,]
+      CV_train=train[CV_index!=step,]
+      group=first_group[CV_index!=step] # if 10-fold, drop 10 elements in group
+      test_group=first_group[CV_index==step]
+      if (length(table(group))!=num_leaf){
+        structure=FALSE
+        break
+      }
+      
+      #For each validation fold, we update the estimator in each leaf using the data from this leaf specifically.
+      first_chf=list()
+      first_time=list()
+      for (i in 1:num_leaf){
+        result_combined=survfit(Surv(time,status)~1, type = "fleming-harrington",data=subset(CV_train,group==i))
+        chf=result_combined$cumhaz
+        first_chf[[i]]=chf
+        time=result_combined$time
+        first_time[[i]]=time
+      }
+      chf_value_dict[[1]]=first_chf
+      time_dict[[1]]=first_time
+      
+    
+      train_set=cbind(CV_train,group)
+      result=tryCatch( # some time only event or only non-event, cannot do pairwise log rank
+        expr={
+          pairwise_survdiff(Surv(time, status)~group, data=train_set)
+        },
+        error = function(e) {
+          message("There was an error message.") # prints structure of exception
+          return(list(NULL))
+        }
+      )
+      
+      if (length(result)==1){
+        structure=FALSE
+        break
+      }
+      result=pairwise_survdiff(Surv(time, status)~group, data=train_set)
+      
+      pvalue=result$p.value
+      index=which(pvalue == max(pvalue,na.rm=T), arr.ind = TRUE)
+      row=as.integer(rownames(pvalue)[index[1,1]])
+      col=as.integer(colnames(pvalue)[index[1,2]]) #row and col are index of the leaves to be combined
+      result_combined_2=survfit(Surv(time,status)~1, type = "fleming-harrington",data=subset(train_set,group%in%c(row,col)))
+      chf_value_combined_2=result_combined_2$cumhaz
+      chf_time_combined_2=result_combined_2$time
+      dict=as.vector(1:num_leaf) # store the process of combining leaves
+      group_dict=list(dict)
+      
+      # Leaf Combination process
+      if (num_leaf>1){
+        for (i in 2:(num_leaf)){
+          #record the current chf function value and time
+          chf=chf_value_dict[[i-1]]
+          time=time_dict[[i-1]]
+          for (j in 1:num_leaf){
+            if (group_dict[[i-1]][j]%in%c(row,col)){
+              chf[[j]]=result_combined_2$cumhaz
+              time[[j]]=result_combined_2$time
+            }
+          }
+          
+          chf_value_dict[[i]]=chf
+          time_dict[[i]]=time
+          
+          #update the group assignment and decide the next combination
+          
+          group=ifelse(group%in%c(row,col), min(row,col), group)
+          #print(paste0("Combine group ",row," and ",col," into group ",min(row,col)))
+          
+          for (ii in 1:num_leaf){
+            if (dict[ii]==max(row,col)){
+              dict[ii]=min(row,col)
+            }
+          }
+          group_dict[[i]]=dict
+          
+          if (i != num_leaf){
+            train_2=cbind(CV_train,group)
+            result=pairwise_survdiff(Surv(time, status)~group, data=train_2)
+            pvalue=result$p.value
+            index=which(pvalue == max(pvalue,na.rm=T), arr.ind = TRUE)
+            row=as.integer(rownames(pvalue)[index[1,1]])
+            col=as.integer(colnames(pvalue)[index[1,2]])
+            
+            result_combined_2=survfit(Surv(time,status)~1, type = "fleming-harrington",data=subset(train_2,group%in%c(row,col)))
+          }
+        }
+      } # end of fitting the trees
+      
+      # now chf_value_dict is a list with length=num_leaf, each element of the list is still a list with length=num_leaf
+      # The jth element of the ith element of chf_value_dict is the chf values for the jth leaf in the tree-like model with num_leaf-i+1 total leaves left
+      # Same result for time_dict
+    
+    
+      # store the risk score for test observations calculated by each tree
+      
+      for (j in 1:nrow(CV_test)){
+        row_time=c(row_time,CV_test$time[j])
+        row_event=c(row_event,CV_test$status[j])
+        for (i in 1:num_leaf){
+          value=chf_value_dict[[i]][[test_group[j]]]
+          time=time_dict[[i]][[test_group[j]]]
+    
+          index=length(time) # find the index of the largest time value smaller than t
+          while(tau<time[index] && index>1){
+            index=index-1
+          }
+          risk_score[[i]]=c(risk_score[[i]],1-exp(-value[index]))
+    
+        }
+      }
+      
+    }
+    
+    # Remove the 0 at the beginning of each risk score
+    for (i in 1:num_leaf){
+      risk_score[[i]]=risk_score[[i]][-1]
+    }
+    # Now risk_score is a list with length=num_leaf. The ith element of risk_score is the failure probability of each patient predicted using the tree-like model with num_leaf-i+1 leaves
+    
+    if (structure==FALSE){
+      next
+    }
+    
+    
+    # Optimization of ensemble weights
+    fn=function(x){
+      result=0
+      for (i in 1:num_leaf){
+        result=result+x[i]*risk_score[[i]]
+      }
+      fn=cIndex(row_time,row_event,as.vector(result))[1]
+      
+      fn
+    }
+    
+    heq=function(x){
+      h=rep(0,1)
+      for (i in 1:num_leaf){
+        h[1]=h[1]+x[i]
+      }
+      h[1]=h[1]-1
+      h
+    }
+    
+    hin=function(x){
+      h=rep(NA,1)
+      for (i in 1:num_leaf){
+        h[i]=x[i]
+      }
+      h
+    }
+    
+    set.seed(1111)
+    p0=runif(num_leaf)
+    ans=constrOptim.nl(par=p0, fn=fn, heq=heq, hin=hin)
+    
+    parameter=ans$par/sum(ans$par)
+    
+    group=first_group
+    chf=list()
+    time=list()
+    for (i in 1:length(terminal_nodes)){
+      chf[[i]]=chf_list[[i]]$chf
+      time[[i]]=chf_list[[i]]$time
+    }
+    
+    chf_value_dict=list(chf)
+    time_dict=list(time)
+    
+    
+    train_set=cbind(train,group)
+    
+    # Perform the log-rank test
+    result <- pairwise_survdiff(Surv(time, status)~group, data=train_set)
+    
+    pvalue=result$p.value
+    index=which(pvalue == max(pvalue,na.rm=T), arr.ind = TRUE)
+    row=as.integer(rownames(pvalue)[index[1,1]])
+    col=as.integer(colnames(pvalue)[index[1,2]])
+    
+    result_combined_2=survfit(Surv(time,status)~1, type = "fleming-harrington",data=subset(train_set,group%in%c(row,col)))
+    
+    chf_value_combined_2=result_combined_2$cumhaz
+    chf_time_combined_2=result_combined_2$time
+    
+    dict=as.vector(1:num_leaf)
+    group_dict=list(dict)
+    
+    if (num_leaf>1){
+      for (i in 2:(num_leaf)){
+        #record the current chf function value and time
+        chf=chf_value_dict[[i-1]]
+        time=time_dict[[i-1]]
+        for (j in 1:num_leaf){
+          if (group_dict[[i-1]][j]%in%c(row,col)){
+            chf[[j]]=result_combined_2$cumhaz
+            time[[j]]=result_combined_2$time
+          }
+        }
+        
+        chf_value_dict[[i]]=chf
+        time_dict[[i]]=time
+        
+        #update the group assignment and decide the next combination
+        
+        group=ifelse(group%in%c(row,col), min(row,col), group)
+        #print(paste0("Combine group ",row," and ",col," into group ",min(row,col)))
+        
+        for (ii in 1:num_leaf){
+          if (dict[ii]==max(row,col)){
+            dict[ii]=min(row,col)
+          }
+        }
+        group_dict[[i]]=dict
+        
+        if (i != num_leaf){
+          train_2=cbind(train,group)
+          result=pairwise_survdiff(Surv(time, status)~group, data=train_2)
+          pvalue=result$p.value
+          index=which(pvalue == max(pvalue,na.rm=T), arr.ind = TRUE)
+          row=as.integer(rownames(pvalue)[index[1,1]])
+          col=as.integer(colnames(pvalue)[index[1,2]])
+          
+          result_combined_2=survfit(Surv(time,status)~1, type = "fleming-harrington",data=subset(train_2,group%in%c(row,col)))
+        }
+      }
+    } # end of fitting the trees
+    
+    # Now evaluate model performance using the test dataset
+    # landmark_tau=365*4
+    # test$status=ifelse(test$time>landmark_tau,0,test$status)
+    # test$time=ifelse(test$time>landmark_tau,landmark_tau,test$time)
+    # tau=landmark_tau
+    tau=max(test$time)
+    # test_predict=predict(model2, data=test)
+    # chf_predict=test_predict$chf
+    # test_group=rep(NA,nrow(test))
+    test_group=rpart.predict.leaves(model_prune, test, type = "where")
+    test_group=unname(test_group)
+    for (i in 1:nrow(test)){
+      test_group[i]=reassign_dict[which(terminal_nodes==test_group[i])]
+    }
+    
+    # for (i in 1:nrow(test)) {
+    #   for (j in 1:length(terminal_nodes)) {
+    #     if (all(chf_predict[i,] == leaf[[j]])) {
+    #       test_group[i]=reassign_dict[j]
+    #     }
+    #   }
+    # }
+    
+
+    k=10
+    baseline_model=coxph(Surv(time, status) ~., data = train, x=TRUE, y=TRUE)
+    surv_fit <- survfit(baseline_model, newdata = test)
+    summary_fit=summary(surv_fit, times = times, extend=TRUE)
+    predicted_probs <- summary_fit$surv
+    
+    fit=survfit(Surv(time,status)~1,data=test)
+    
+    pseudo=exp(-pseudo(survfit(Surv(time, status) ~ 1, data=test),times=times,type="cumhaz"))
+    # pseudo=pseudosurv(time=test$time,event=test$status,tmax=times)$pseudo
+    long_data=test
+    
+    long_data$pseudo=pseudo
+    long_data$ipseudo=1-long_data$pseudo
+    long_data$id=1:nrow(long_data)
+    
+    long_data$risk_score=c(predicted_probs)
+    long_data$log_hazard=log(-log(1-long_data$risk_score))
+    
+    long_data=subset(long_data, abs(ipseudo)<3)
+    
+    geese_fit <- geese(as.formula(ipseudo ~ offset(log_hazard)) , id=id, data = long_data, scale.fix=TRUE, family=gaussian, mean.link = "cloglog", corstr="independence")
+    
+    coef_estimates=geese_fit$beta
+    cov_matrix=geese_fit$vbeta
+        
+    intercept_terms <- names(coef_estimates)
+    hyp_matrix <- diag(length(intercept_terms))
+    rownames(hyp_matrix) <- names(coef_estimates)[intercept_terms]
+    
+    L=hyp_matrix
+    
+    wald_statistic <- t(L %*% coef_estimates) %*% pseudoinverse(L %*% cov_matrix %*% t(L)) %*% (L %*% coef_estimates)
+    coxph[train_index,test_index]=wald_statistic
+    time_points=summary_fit$time
+    
+    test_risk_score=list()
+    for (i in 1:num_leaf){
+      test_risk_score[[i]]=list()
+      for (u in 1:length(time_points)){
+        test_risk_score[[i]][[u]]=rep(0,nrow(test))
+      }
+      # list of list, risk_score[[i]] represents ith model, and risk_score[[i]][[k]] represents risk score at kth time point
+    }
+    
+    for (j in 1:nrow(test)){
+      for (i in 1:num_leaf){
+        value=chf_value_dict[[i]][[test_group[j]]]
+        time=time_dict[[i]][[test_group[j]]]
+        for (u in 1:length(time_points)){
+          t=time_points[u]
+          index=length(time) # find the index of the largest time value smaller than t
+          while(t<time[index] && index>1){
+            index=index-1
+          }
+          test_risk_score[[i]][[u]][j]=1-exp(-value[index])
+        }
+      }
+    }
+    
+    prob_matrix = matrix(unlist(test_risk_score[[1]]), ncol = length(time_points), byrow = FALSE)
+
+    
+    long_data$risk_score=c(prob_matrix)
+    long_data$log_hazard=log(-log(1-long_data$risk_score))
+    long_data2=subset(long_data, abs(log_hazard)<5)
+    
+    geese_fit <- geese(as.formula(ipseudo ~ offset(log_hazard)) , id=id, data = long_data2, scale.fix=TRUE, family=gaussian, mean.link = "cloglog", corstr="independence")
+    
+    coef_estimates=geese_fit$beta
+    cov_matrix=geese_fit$vbeta
+        
+    intercept_terms <- names(coef_estimates)
+    hyp_matrix <- diag(length(intercept_terms))
+    rownames(hyp_matrix) <- names(coef_estimates)[intercept_terms]
+    
+    L=hyp_matrix
+    
+    wald_statistic <- t(L %*% coef_estimates) %*% pseudoinverse(L %*% cov_matrix %*% t(L)) %*% (L %*% coef_estimates)
+    initial[train_index,test_index]=wald_statistic
+    
+    
+    result=0
+    for (i in 1:num_leaf){
+      result=result+parameter[i]*matrix(unlist(test_risk_score[[i]]), ncol = length(time_points), byrow = FALSE) # calculating the ensemble risk score
+    }
+    
+    
+    long_data$risk_score=c(result+0.000001)
+    long_data$log_hazard=log(-log(1-long_data$risk_score))
+    long_data2=subset(long_data, abs(log_hazard)<5)
+    
+    geese_fit <- geese(as.formula(ipseudo ~ offset(log_hazard)) , id=id, data = long_data2, scale.fix=TRUE, family=gaussian, mean.link = "cloglog", corstr="independence")
+    
+    coef_estimates=geese_fit$beta
+    cov_matrix=geese_fit$vbeta
+        
+    intercept_terms <- names(coef_estimates)
+    hyp_matrix <- diag(length(intercept_terms))
+    rownames(hyp_matrix) <- names(coef_estimates)[intercept_terms]
+    
+    L=hyp_matrix
+    
+    wald_statistic <- t(L %*% coef_estimates) %*% pseudoinverse(L %*% cov_matrix %*% t(L)) %*% (L %*% coef_estimates)
+    ensemble[train_index,test_index]=wald_statistic
+  
+    
+    test_predict=predict(model1, data=test)
+    chf_predict=test_predict$chf
+    chf_predict_time=test_predict$unique.death.times
+    test_risk_score2=matrix(0,nrow=nrow(test),ncol=length(time_points))
+    
+    for (j in 1:nrow(test)){
+      for (u in 1:length(time_points)){
+        t=time_points[u]
+        index=length(chf_predict_time) # find the index of the largest time value smaller than t
+        while(t<chf_predict_time[index] && index>1){
+          index=index-1
+        }
+        test_risk_score2[j,u]=1-exp(-chf_predict[j,index])
+      }
+    }
+    
+    # print(paste("forest: ",IBS(with(test,Surv(time,status)),sp_matrix =test_risk_score2)))
+    # print(paste("leaf: ",num_leaf))
+    
+    long_data$risk_score=c(t(test_risk_score2)+0.000001)
+    long_data$log_hazard=log(-log(1-long_data$risk_score))
+    long_data2=subset(long_data, abs(log_hazard)<5)
+    
+    geese_fit <- geese(as.formula(ipseudo ~ offset(log_hazard)) , id=id, data = long_data2, scale.fix=TRUE, family=gaussian, mean.link = "cloglog", corstr="independence")
+    
+    coef_estimates=geese_fit$beta
+    cov_matrix=geese_fit$vbeta
+        
+    intercept_terms <- names(coef_estimates)
+    hyp_matrix <- diag(length(intercept_terms))
+    rownames(hyp_matrix) <- names(coef_estimates)[intercept_terms]
+    
+    L=hyp_matrix
+    
+    wald_statistic <- t(L %*% coef_estimates) %*% pseudoinverse(L %*% cov_matrix %*% t(L)) %*% (L %*% coef_estimates)
+    forest[train_index,test_index]=wald_statistic
+    
+    leaf_matrix[train_index,test_index]=num_leaf
+  }
+}
+```
+```{r}
+# merge_IFM_data_binary=merged_IFM_data_continuous
+# merge_IFM_data_binary$EMC=ifelse(merged_IFM_data_continuous$EMC>quantile(merged_IFM_data_continuous$EMC,0.8),1,0)
+# merge_IFM_data_binary$EI=ifelse(merged_IFM_data_continuous$EI>quantile(merged_IFM_data_continuous$EI,0.8),1,0)
+# merge_IFM_data_binary$UAMS=ifelse(merged_IFM_data_continuous$UAMS>quantile(merged_IFM_data_continuous$UAMS,0.8),1,0)
+# merge_IFM_data_binary$GPI=ifelse(merged_IFM_data_continuous$GPI>quantile(merged_IFM_data_continuous$GPI,0.9),1,0)
+```
+
+```{r}
+# merge_MMRF_data_binary=merged_MMRF_data_continuous
+# merge_MMRF_data_binary$EMC=ifelse(merged_MMRF_data_continuous$EMC>quantile(merged_MMRF_data_continuous$EMC,0.8),1,0)
+# merge_MMRF_data_binary$EI=ifelse(merged_MMRF_data_continuous$EI>quantile(merged_MMRF_data_continuous$EI,0.8),1,0)
+# merge_MMRF_data_binary$UAMS=ifelse(merged_MMRF_data_continuous$UAMS>quantile(merged_MMRF_data_continuous$UAMS,0.8),1,0)
+# merge_MMRF_data_binary$GPI=ifelse(merged_MMRF_data_continuous$GPI>quantile(merged_MMRF_data_continuous$GPI,0.9),1,0)
+```
+
+
+
+```{r}
+train = drop_na(merged_MMRF_data_binary)
+test = drop_na(IFM_binary)
+tau=max(merged_MMRF_data_binary$time)
+
+forest_loss01=rep(0,50)
+rpart_initial_loss01=rep(0,50)
+rpart_super_loss01=rep(0,50)
+rpart_leave01=rep(0,50)
+
+for (seed in 1:1){
+  set.seed(seed)
+  structure=TRUE
+  model1=ranger(Surv(time, status) ~ .,data=train,num.tree=500,mtry=ncol(train)-2,splitrule = "logrank", min.node.size = 5)
+  
+  # set.seed(109) 
+  # seed 109, num_leaf=4, min leaf size=13
+  # seed 7305, min leaf size=11
+  
+  # Fit single survival tree to get initial leaf allocation
+  set.seed(seed)
+  model_prune=rpart(Surv(time, status) ~ .,data=train)
+  terminal_nodes <- which(model_prune$frame$var == "<leaf>")
+  f= function(node) {
+    # Extract the subset of data corresponding to the leaf node
+    node_data <- train[model_prune$where == as.numeric(node), ]
+    
+    # Fit a survival model to the data in the node
+    node_fit <- survfit(Surv(time, status) ~ 1, data = node_data)
+    
+    # Extract the cumulative hazard function
+    chf <- cumsum(node_fit$n.event / node_fit$n.risk)
+    data.frame(time = node_fit$time, chf = chf)
+  }
+  chf_list=lapply(terminal_nodes,f)
+  
+  group=rep(0,nrow(train))
+  for (i in 1:nrow(train)){
+    group[i]=which(terminal_nodes==model_prune$where[i])
+  }
+  group=unname(group)
+  chf_value_dict=list() # a list of lists of chf values
+  time_dict=list() # a list of lists of time points
+  # We now make sure every leaf has at least 2 observations, otherwise the tree structure might not pertain in 10-fold cross validation. For leaves with 1 or 2 observations, we randomly combine this leaf with another leaf.
+  leaf_size=as.vector(table(group))
+  single_leaf=as.vector(which(leaf_size<=2))
+  normal_leaf=as.vector(which(leaf_size>2))
+  
+  reassign_dict=as.vector(1:length(terminal_nodes))
+  for (i in 1:length(single_leaf)){
+    new_assignment=sample(normal_leaf,1)
+    group[which(group==single_leaf[i])]=new_assignment
+    reassign_dict[single_leaf[i]]=new_assignment
+  }
+  
+  # change the group from 1 3 4 5 to 1 2 3 4 after combining leaves
+  num_leaf=length(table(group))
+  loose_group=as.numeric(names(table(group)))
+  for (i in 1:length(group)){
+    group[i]=which(loose_group==group[i])
+  }
+  for (i in 1:length(terminal_nodes)){
+    reassign_dict[i]=which(loose_group==reassign_dict[i])
+  }
+  
+  num_leaf=length(table(group))
+  
+  # keep the first group allocation for CV
+  first_group=group
+  
+  # 10-fold cross validation
+  if (min(table(group))>=2){ # condition automatically fulfilled from the recombining step
+    fold=10
+    sampleframe = rep(1:fold, ceiling( nrow(train)/fold ) )
+    set.seed(seed)
+    CV_index=sample(sampleframe,nrow(train) ,  replace=FALSE )
+    # CV_index=rep(1:10,nrow(train)/10)
+    CV_losses=list()
+  }else{
+    fold=nrow(train)
+    CV_index=1:nrow(train)
+    CV_losses=list()
+  }
+  
+  # Store the time, event data for calculating test c index
+  row_time=c()
+  row_event=c()
+  risk_score=list()
+  for (i in 1:num_leaf){
+    risk_score[[i]]=c(0)
+  }
+  
+  
+  # Cross Validation
+  for (step in 1:fold){
+    CV_test=train[CV_index==step,]
+    CV_train=train[CV_index!=step,]
+    group=first_group[CV_index!=step] # if 10-fold, drop 10 elements in group
+    test_group=first_group[CV_index==step]
+    if (length(table(group))!=num_leaf){
+      structure=FALSE
+      break
+    }
+    
+    #For each validation fold, we update the estimator in each leaf using the data from this leaf specifically.
+    first_chf=list()
+    first_time=list()
+    for (i in 1:num_leaf){
+      result_combined=survfit(Surv(time,status)~1, type = "fleming-harrington",data=subset(CV_train,group==i))
+      chf=result_combined$cumhaz
+      first_chf[[i]]=chf
+      time=result_combined$time
+      first_time[[i]]=time
+    }
+    chf_value_dict[[1]]=first_chf
+    time_dict[[1]]=first_time
+    
+  
+    train_set=cbind(CV_train,group)
+    result=tryCatch( # some time only event or only non-event, cannot do pairwise log rank
+      expr={
+        pairwise_survdiff(Surv(time, status)~group, data=train_set)
+      },
+      error = function(e) {
+        message("There was an error message.") # prints structure of exception
+        return(list(NULL))
+      }
+    )
+    
+    if (length(result)==1){
+      structure=FALSE
+      break
+    }
+    result=pairwise_survdiff(Surv(time, status)~group, data=train_set)
+    
+    pvalue=result$p.value
+    index=which(pvalue == max(pvalue,na.rm=T), arr.ind = TRUE)
+    row=as.integer(rownames(pvalue)[index[1,1]])
+    col=as.integer(colnames(pvalue)[index[1,2]]) #row and col are index of the leaves to be combined
+    result_combined_2=survfit(Surv(time,status)~1, type = "fleming-harrington",data=subset(train_set,group%in%c(row,col)))
+    chf_value_combined_2=result_combined_2$cumhaz
+    chf_time_combined_2=result_combined_2$time
+    dict=as.vector(1:num_leaf) # store the process of combining leaves
+    group_dict=list(dict)
+    
+    # Leaf Combination process
+    if (num_leaf>1){
+      for (i in 2:(num_leaf)){
+        #record the current chf function value and time
+        chf=chf_value_dict[[i-1]]
+        time=time_dict[[i-1]]
+        for (j in 1:num_leaf){
+          if (group_dict[[i-1]][j]%in%c(row,col)){
+            chf[[j]]=result_combined_2$cumhaz
+            time[[j]]=result_combined_2$time
+          }
+        }
+        
+        chf_value_dict[[i]]=chf
+        time_dict[[i]]=time
+        
+        #update the group assignment and decide the next combination
+        
+        group=ifelse(group%in%c(row,col), min(row,col), group)
+        #print(paste0("Combine group ",row," and ",col," into group ",min(row,col)))
+        
+        for (ii in 1:num_leaf){
+          if (dict[ii]==max(row,col)){
+            dict[ii]=min(row,col)
+          }
+        }
+        group_dict[[i]]=dict
+        
+        if (i != num_leaf){
+          train_2=cbind(CV_train,group)
+          result=pairwise_survdiff(Surv(time, status)~group, data=train_2)
+          pvalue=result$p.value
+          index=which(pvalue == max(pvalue,na.rm=T), arr.ind = TRUE)
+          row=as.integer(rownames(pvalue)[index[1,1]])
+          col=as.integer(colnames(pvalue)[index[1,2]])
+          
+          result_combined_2=survfit(Surv(time,status)~1, type = "fleming-harrington",data=subset(train_2,group%in%c(row,col)))
+        }
+      }
+    } # end of fitting the trees
+    
+    # now chf_value_dict is a list with length=num_leaf, each element of the list is still a list with length=num_leaf
+    # The jth element of the ith element of chf_value_dict is the chf values for the jth leaf in the tree-like model with num_leaf-i+1 total leaves left
+    # Same result for time_dict
+  
+  
+    # store the risk score for test observations calculated by each tree
+    
+    for (j in 1:nrow(CV_test)){
+      row_time=c(row_time,CV_test$time[j])
+      row_event=c(row_event,CV_test$status[j])
+      for (i in 1:num_leaf){
+        value=chf_value_dict[[i]][[test_group[j]]]
+        time=time_dict[[i]][[test_group[j]]]
+  
+        index=length(time) # find the index of the largest time value smaller than t
+        while(tau<time[index] && index>1){
+          index=index-1
+        }
+        risk_score[[i]]=c(risk_score[[i]],1-exp(-value[index]))
+  
+      }
+    }
+    
+  }
+  
+  # Remove the 0 at the beginning of each risk score
+  for (i in 1:num_leaf){
+    risk_score[[i]]=risk_score[[i]][-1]
+  }
+  # Now risk_score is a list with length=num_leaf. The ith element of risk_score is the failure probability of each patient predicted using the tree-like model with num_leaf-i+1 leaves
+  
+  if (structure==FALSE){
+    next
+  }
+  
+  
+  # Optimization of ensemble weights
+  fn=function(x){
+    result=0
+    for (i in 1:num_leaf){
+      result=result+x[i]*risk_score[[i]]
+    }
+    fn=cIndex(row_time,row_event,as.vector(result))[1]
+    
+    fn
+  }
+  
+  heq=function(x){
+    h=rep(0,1)
+    for (i in 1:num_leaf){
+      h[1]=h[1]+x[i]
+    }
+    h[1]=h[1]-1
+    h
+  }
+  
+  hin=function(x){
+    h=rep(NA,1)
+    for (i in 1:num_leaf){
+      h[i]=x[i]
+    }
+    h
+  }
+  
+  set.seed(1111)
+  p0=runif(num_leaf)
+  ans=constrOptim.nl(par=p0, fn=fn, heq=heq, hin=hin)
+  
+  parameter=ans$par/sum(ans$par)
+  
+  # Use the full group
+  
+  # predict2=predict(model2, data=train)
+  # chf_time=predict2$unique.death.times
+  # chf_value=predict2$chf
+  # chf_value_dict=list()
+  # for (i in 1:length(terminal_nodes)){
+  #   chf_value_dict[[i]]=list(chf_list[[i]]$chf)
+  #   time_dict[[i]]=list(chf_list[[i]]$time)
+  # }
+  # 
+  # for (i in 1:nrow(train)) {
+  #   for (j in 1:length(leaf)) {
+  #     if (all(chf_value[i,] == leaf[[j]])) {
+  #       group[i]=reassign_dict[j]
+  #     }
+  #   }
+  # }
+  # 
+  # chf_value_dict=list(leaf) # a list of lists of chf values
+  # time=list()
+  # for (i in 1:num_leaf){
+  #   time[[i]]=chf_time
+  # }
+  # time_dict=list(time) # a list of lists of time points
+  group=first_group
+  chf=list()
+  time=list()
+  for (i in 1:length(terminal_nodes)){
+    chf[[i]]=chf_list[[i]]$chf
+    time[[i]]=chf_list[[i]]$time
+  }
+  
+  chf_value_dict=list(chf)
+  time_dict=list(time)
+  
+  test_risk_score=list()
+  for (i in 1:num_leaf){
+    test_risk_score[[i]]=rep(NA,nrow(test))
+  }
+  
+  train_set=cbind(train,group)
+  
+  # Perform the log-rank test
+  result <- pairwise_survdiff(Surv(time, status)~group, data=train_set)
+  
+  pvalue=result$p.value
+  index=which(pvalue == max(pvalue,na.rm=T), arr.ind = TRUE)
+  row=as.integer(rownames(pvalue)[index[1,1]])
+  col=as.integer(colnames(pvalue)[index[1,2]])
+  
+  result_combined_2=survfit(Surv(time,status)~1, type = "fleming-harrington",data=subset(train_set,group%in%c(row,col)))
+  
+  chf_value_combined_2=result_combined_2$cumhaz
+  chf_time_combined_2=result_combined_2$time
+  
+  dict=as.vector(1:num_leaf)
+  group_dict=list(dict)
+  
+  if (num_leaf>1){
+    for (i in 2:(num_leaf)){
+      #record the current chf function value and time
+      chf=chf_value_dict[[i-1]]
+      time=time_dict[[i-1]]
+      for (j in 1:num_leaf){
+        if (group_dict[[i-1]][j]%in%c(row,col)){
+          chf[[j]]=result_combined_2$cumhaz
+          time[[j]]=result_combined_2$time
+        }
+      }
+      
+      chf_value_dict[[i]]=chf
+      time_dict[[i]]=time
+      
+      #update the group assignment and decide the next combination
+      
+      group=ifelse(group%in%c(row,col), min(row,col), group)
+      #print(paste0("Combine group ",row," and ",col," into group ",min(row,col)))
+      
+      for (ii in 1:num_leaf){
+        if (dict[ii]==max(row,col)){
+          dict[ii]=min(row,col)
+        }
+      }
+      group_dict[[i]]=dict
+      
+      if (i != num_leaf){
+        train_2=cbind(train,group)
+        result=pairwise_survdiff(Surv(time, status)~group, data=train_2)
+        pvalue=result$p.value
+        index=which(pvalue == max(pvalue,na.rm=T), arr.ind = TRUE)
+        row=as.integer(rownames(pvalue)[index[1,1]])
+        col=as.integer(colnames(pvalue)[index[1,2]])
+        
+        result_combined_2=survfit(Surv(time,status)~1, type = "fleming-harrington",data=subset(train_2,group%in%c(row,col)))
+      }
+    }
+  } # end of fitting the trees
+  
+  # Now evaluate model performance using the test dataset
+  tau=max(test$time)
+  # test_predict=predict(model2, data=test)
+  # chf_predict=test_predict$chf
+  # test_group=rep(NA,nrow(test))
+  test_group=rpart.predict.leaves(model_prune, test, type = "where")
+  test_group=unname(test_group)
+  for (i in 1:nrow(test)){
+    test_group[i]=reassign_dict[which(terminal_nodes==test_group[i])]
+  }
+  
+  # for (i in 1:nrow(test)) {
+  #   for (j in 1:length(terminal_nodes)) {
+  #     if (all(chf_predict[i,] == leaf[[j]])) {
+  #       test_group[i]=reassign_dict[j]
+  #     }
+  #   }
+  # }
+  
+  for (j in 1:nrow(test)){
+    for (i in 1:num_leaf){
+      value=chf_value_dict[[i]][[test_group[j]]]
+      time=time_dict[[i]][[test_group[j]]]
+      
+      index=length(time) # find the index of the largest time value smaller than t
+      while(tau<time[index] && index>1){
+        index=index-1
+      }
+      test_risk_score[[i]][j]=1-exp(-value[index])
+      
+    }
+    
+  }
+  
+  test_c_index=rep(0,num_leaf)
+  for (i in 1:num_leaf){
+    test_c_index[i]=cIndex(test$time,test$status,as.vector(test_risk_score[[i]]))[1]
+  }
+  result=0
+  for (i in 1:num_leaf){
+    result=result+parameter[i]*test_risk_score[[i]] # calculating the ensemble risk score
+  }
+  
+  rpart_super_loss01[seed]=cIndex(test$time,test$status,as.vector(result))[1]
+  rpart_initial_loss01[seed]=test_c_index[1]
+  
+  test_predict=predict(model1, data=test)
+  chf_predict=test_predict$chf
+  chf_predict_time=test_predict$unique.death.times
+  test_risk_score2=rep(0,nrow(test))
+  
+  for (j in 1:nrow(test)){
+    index=length(chf_predict_time) # find the index of the largest time value smaller than t
+    while(tau<chf_predict_time[index] && index>1){
+      index=index-1
+    }
+    test_risk_score2[j]=1-exp(-chf_predict[j,index])
+  }
+  
+  forest_loss01[seed]=cIndex(test$time,test$status,as.vector(test_risk_score2))[1]
+  rpart_leave01[seed]=num_leaf
+  print(seed)
+}
+```
+
+```{r}
+rpart_summary=cbind(forest_loss,forest_loss01,rpart_initial_loss,rpart_initial_loss01,rpart_super_loss,rpart_super_loss01)
+par(cex.axis=0.8, mar=c(9, 10, 5, 1))
+boxplot(rpart_summary,beside=T,horizontal=T,las=1,xlab="C index")
+```
+```{r}
+# test=drop_na(read_csv("merged_IFM_data_continuous.csv"))
+# merged_data=read_csv("merge\ data\ continuous.csv")
+# index = sample(nrow(merged_data), 400, replace = F)
+# train = merged_data[index,]
+# test = merged_data[-index,]
+baseline_model=coxph(Surv(time, status) ~EMC+UAMS70+EI+GPI, data = train)
+risk_score=predict(baseline_model,test,type = "risk")
+cIndex(test$time,test$status,as.vector(risk_score))[1]
+```
+
+```{r}
+summary=as.data.frame(cbind(forest_loss,forest_loss01,prune_initial_loss,prune_initial_loss01,prune_super_loss,prune_super_loss01))
+summary$initial01_ratio=summary$prune_initial_loss01/summary$prune_initial_loss
+summary$super01_ratio=summary$prune_super_loss01/summary$prune_initial_loss
+summary$forest01_ratio=summary$forest_loss01/summary$prune_initial_loss
+summary$super_ratio=summary$prune_super_loss/summary$prune_initial_loss
+summary$forest_ratio=summary$forest_loss/summary$prune_initial_loss
+summary_ratio=summary[,7:11]
+par(cex.axis=0.8, mar=c(9, 10, 5, 1))
+boxplot(summary_ratio,beside=T,horizontal=T,las=1,xlab="C index")
+```
+```{r}
+write.csv(merged_data,"merge data continuous.csv",row.names = F)
+write.csv(merged_data01,"merge data binary.csv",row.names = F)
+```
+

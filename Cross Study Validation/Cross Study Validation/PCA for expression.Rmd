@@ -1,0 +1,141 @@
+---
+title: "real data analysis experiment"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(readr)
+library(tidyr)
+library(dplyr)
+library(janitor)
+MMRF_TPM=read_tsv("./MMRF_TPM.tsv")
+MMRF_expression <- MMRF_TPM %>% dplyr::select("Gene",ends_with("_1_BM_CD138pos"))
+IFM_expression=read_csv("./TPM_IFM.csv")
+IFM_gene=sub('\\.[0-9]*$', '', colnames(IFM_expression))
+```
+
+```{r}
+gene_list=intersect(IFM_gene,MMRF_expression$Gene)
+```
+
+```{r}
+GAMER_expression=read_csv("./Gamer_expression.csv")
+```
+
+```{r}
+geneDict=read_csv("./genedict.csv")
+geneDict$ensembl=sub('\\.[0-9]*$', '', geneDict$GeneID)
+geneDict1=subset(geneDict, ensembl %in% gene_list)
+```
+
+```{r}
+gene_list2=intersect(geneDict1$GeneSymbol,names(GAMER_expression))
+GAMER_expression=GAMER_expression[,names(GAMER_expression) %in% gene_list2]
+geneDict2=subset(geneDict, GeneSymbol %in% gene_list2)
+```
+
+```{r}
+# UAMS=read_csv("./UAMS_expression.csv")
+# UAMS_expression=UAMS[,names(UAMS) %in% dict$affy_hg_u133_plus_2]
+# dict=dict[dict$affy_hg_u133_plus_2 %in% names(UAMS),]
+```
+
+Get all four dataset into same format
+```{r}
+colnames(IFM_expression)=sub('\\.[0-9]*$', '', colnames(IFM_expression))
+IFM_expression=IFM_expression[,colnames(IFM_expression) %in% geneDict2$ensembl]
+```
+
+```{r}
+MMRF_expression=subset(MMRF_expression,Gene %in% geneDict2$ensembl)%>%
+  t()
+```
+
+```{r}
+MMRF_expression=as.data.frame(MMRF_expression)%>%
+  row_to_names(row_number = 1)
+```
+
+```{r}
+GAMER_expression=GAMER_expression[,names(GAMER_expression) %in% geneDict2$GeneSymbol]
+for (i in 1:ncol(GAMER_expression)){
+  colnames(GAMER_expression)[i]=geneDict2$ensembl[min(which(geneDict2$GeneSymbol==colnames(GAMER_expression)[i]))]
+}
+```
+
+```{r}
+gene_list3=(intersect(colnames(MMRF_expression),colnames(GAMER_expression)))
+```
+
+```{r}
+IFM_expression1=IFM_expression[,colnames(IFM_expression) %in% gene_list3]
+MMRF_expression1=MMRF_expression[,colnames(MMRF_expression) %in% gene_list3]
+GAMER_expression1=GAMER_expression[,colnames(GAMER_expression) %in% gene_list3]
+```
+
+
+```{r}
+IFM_expression1=as.data.frame(sapply(IFM_expression1,as.numeric))
+IFM_expression1$dataset=rep("IFM",nrow(IFM_expression))
+MMRF_expression1=as.data.frame(sapply(MMRF_expression1,as.numeric))
+MMRF_expression1$dataset=rep("MMRF",nrow(MMRF_expression))
+GAMER_expression1=as.data.frame(sapply(GAMER_expression1,as.numeric))
+GAMER_expression1$dataset=rep("GAMER",nrow(GAMER_expression))
+```
+
+
+```{r}
+combined_df <- bind_rows(IFM_expression1,MMRF_expression1,GAMER_expression1)
+```
+
+```{r}
+combined_df[is.na(combined_df)]=0
+```
+
+```{r}
+combined_df_filtered=combined_df[,colMeans(combined_df[,-which(colnames(combined_df)=="dataset")])>0.1]
+combined_df_filtered$dataset=combined_df$dataset
+```
+
+
+
+```{r}
+library(ggplot2)
+pca <- prcomp(combined_df_filtered[,-which(colnames(combined_df_filtered)=="dataset")])
+
+# Create a dataframe with PCA results
+pca_df <- as.data.frame(pca$x)
+pca_df$dataset <- combined_df$dataset
+
+# Visualize the PCA results
+p <- ggplot(pca_df, aes(x = PC1, y = PC2, color = dataset)) +
+  geom_point(size = 1) +
+  ggtitle("PCA of Combined Datasets") +
+  xlab("Principal Component 1") +
+  ylab("Principal Component 2") +
+  theme_minimal()
+print(p)
+```
+
+```{r}
+loadings <- pca$rotation
+print(loadings)
+
+# Formulas for the first few principal components
+for (i in 1:3) {
+  cat("PC", i, " = ", sep="")
+  formula <- paste0(round(loadings[, i], 3), "*", colnames(df), collapse=" + ")
+  cat(formula, "\n")
+}
+
+# Example of the first principal component formula
+pc1_formula <- paste0(round(loadings[, 1], 3), "*", colnames(df), collapse=" + ")
+cat("PC1 = ", pc1_formula, "\n")
+```
+
+
