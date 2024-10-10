@@ -16,9 +16,9 @@ The `real_data_experiment.Rmd` file shows an example of training the ensemble tr
 
 - The constrOptim.nl() function from the Alabama package is used to find the optimal ensemble weights for the ensemble tree-like model.
 
-## Implementation in MMRF
+## Implementation in MMRF/IFM/Gamer/UAMS
 
-The folder includes Rmd files implementing risk prediction models (EMC-92, UAMS-70) using gene expression levels to predict risk of MM patients using the MMRF data. Gene expression level data and patient survival data of the MMRF study was used. Brainarray platform and biomaRt package were used to convert probe set IDs to gene ensembl IDs.
+The folders include Rmd files implementing risk prediction models (EMC-92, UAMS-70, EI-score, Gene Proliferation Index, UAMS-17, UAMS-80, IFM-15, HM19) using gene expression levels to predict risk of MM patients using each dataset. Gene expression level data and patient survival data of each MM study was used. Brainarray platform and biomaRt package were used to convert probe set IDs to gene ensembl IDs.
 
 The brainarray file can be downloaded at http://brainarray.mbni.med.umich.edu/Brainarray/Database/CustomCDF/25.0.0/ensg.asp.
 
@@ -42,7 +42,7 @@ The folder contains exploration on methods to develop an optimal tree to begin t
 
 - The files including OST in their names explore the performance of ensemble model on optimal survival trees (using OST algorithm implemented in Julia). OST can be called using the IAI package in R. https://docs.interpretable.ai/stable/IAI-R/quickstart/ot_survival/
 
-## Independent Validation
+## Cross Study Validation
 
 The folder contains exploration on ensemble tree performance while validated on an independent dataset. We train the model using the MMRF dataset and validate the models on the IFM dataset, after implementing all risk prediction models in the IFM dataset. `Cross Study experiment in MMRF and IFM` includes codes to train and validate the methods in MMRF and IFM. 
 
