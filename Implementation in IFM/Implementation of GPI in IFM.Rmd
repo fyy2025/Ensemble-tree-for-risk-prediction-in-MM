@@ -72,7 +72,7 @@ for (i in 1:ncol(scaled_data)){
 ```{r}
 patient=gsub(pattern = "_",replacement = "-",x = patient)
 patient=substr(patient,1,nchar(patient)-2)
-cutoff=quantile(score,0.9)
+cutoff=quantile(score,0.8)
 high_risk=patient[score>=cutoff]
 low_risk=patient[score<cutoff]
 ```
@@ -98,7 +98,13 @@ survdiff(Surv(TTRelpase,Relapse) ~ risk, data = IFM_Survival)
 
 ```{r}
 OS_fit=survfit(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
-autoplot(OS_fit,main="OS of different risk groups categorized by EMC-92")
+result=survdiff(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
+KM=autoplot(OS_fit,main="OS of different risk groups in IFM categorized by GPI")+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/IFM-GPI.pdf",
+       device = "pdf")
+write(high_risk, "./Categorization/IFM-GPI.txt")
 ```
 ```{r}
 survdiff(Surv(TTOS,Death) ~ risk, data = IFM_Survival)

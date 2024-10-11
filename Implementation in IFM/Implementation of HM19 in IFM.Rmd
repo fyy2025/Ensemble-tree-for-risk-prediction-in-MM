@@ -60,7 +60,7 @@ patient=substr(patient,1,nchar(patient)-2)
 Brainarray mapping
 ```{r}
 library(readr)
-HGU133Plus2_Hs_ENSG_mapping <- read_delim("/Users/fanyiyang/Desktop/Research/summer/Implementation\ of\ risk\ models/HGU133Plus2_Hs_ENSG_mapping.txt",delim = "\t", escape_double = FALSE,  trim_ws = TRUE)
+HGU133Plus2_Hs_ENSG_mapping <- read_delim("./HGU133Plus2_Hs_ENSG_mapping.txt",delim = "\t", escape_double = FALSE,  trim_ws = TRUE)
 # View(HGU133Plus2_Hs_ENSG_mapping)
 
 HGU133Plus2_Hs_ENSG_mapping2 <- HGU133Plus2_Hs_ENSG_mapping[HGU133Plus2_Hs_ENSG_mapping$`Affy Probe Set Name` %in% probeset_id,c(1,7)]
@@ -155,7 +155,13 @@ survdiff(Surv(TTRelpase,Relapse) ~ risk, data = IFM_Survival)
 
 ```{r}
 OS_fit=survfit(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
-autoplot(OS_fit,main="OS of different risk groups categorized by HM19")
+result=survdiff(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
+KM=autoplot(OS_fit,main="OS of different risk groups in IFM categorized by HM-19")+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/IFM-HM19.pdf",
+       device = "pdf")
+write(high_risk, "./Categorization/IFM-HM19.txt")
 ```
 ```{r}
 survdiff(Surv(TTOS,Death) ~ risk, data = IFM_Survival)

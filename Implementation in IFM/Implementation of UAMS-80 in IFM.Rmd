@@ -1,5 +1,5 @@
 ---
-title: "Implementation of HM19"
+title: "Implementation of EMC-92"
 output: html_document
 ---
 
@@ -14,12 +14,12 @@ This is an R Markdown document. Markdown is a simple formatting syntax for autho
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
 
-Get the probe set IDs and weights in the EMC92 model
+Get the probe set IDs and weights in the EMC-92 model
 ```{r}
 library(geneClassifiers)
-EMC92Classifier<-getClassifier("EMC92")
-EMC92Classifier
-weights=getWeights(EMC92Classifier)
+UAMS80Classifier<-getClassifier("UAMS80")
+UAMS80Classifier
+weights=getWeights(UAMS80Classifier)
 weights
 probeset_id=names(weights)
 ```
@@ -106,7 +106,7 @@ for (i in 1:length(weights)){
     second=second+1
   }
 }
-# 77 genes from brainarray, 9 genes from bioMart
+# 60 genes from brainarray, 8 genes from bioMart
 ```
 
 ```{r}
@@ -156,20 +156,20 @@ survdiff(Surv(TTRelpase,Relapse) ~ risk, data = IFM_Survival)
 ```{r}
 OS_fit=survfit(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
 result=survdiff(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
-KM=autoplot(OS_fit,main="OS of different risk groups in IFM categorized by EMC-92")+
+KM=autoplot(OS_fit,main="OS of different risk groups in IFM categorized by UAMS-80")+
   ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
 ggsave(KM, 
-       filename = "./KM\ curves/IFM-EMC92.pdf",
+       filename = "./KM\ curves/IFM-UAMS80.pdf",
        device = "pdf")
-write(high_risk, "./Categorization/IFM-EMC92.txt")
+write(high_risk, "./Categorization/IFM-UAMS80.txt")
 ```
 ```{r}
 survdiff(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
 ```
 
 ```{r}
-EMC_score=data.frame(score)
-EMC_score$patient=patient
-write.csv(EMC_score,"EMC_score_IFM.csv",row.names=F)
+UAMS_score=data.frame(score)
+UAMS_score$patient=patient
+write.csv(UAMS_score,"UAMS80_score_IFM.csv",row.names=F)
 ```
 

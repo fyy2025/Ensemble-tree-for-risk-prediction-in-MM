@@ -126,7 +126,13 @@ IFM_Survival$risk=ifelse(IFM_Survival$subjid %in% OS_high_risk, 1, 0) #risk=1 re
 library(survival)
 library(ggfortify)
 OS_fit=survfit(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
-autoplot(OS_fit,main="OS of different risk groups categorized by EI score")
+result=survdiff(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
+KM=autoplot(OS_fit,main="OS of different risk groups in IFM categorized by EI-score")+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/IFM-EI.pdf",
+       device = "pdf")
+write(OS_high_risk, "./Categorization/IFM-EI.txt")
 ```
 ```{r}
 survdiff(Surv(TTOS,Death) ~ risk, data = IFM_Survival)
