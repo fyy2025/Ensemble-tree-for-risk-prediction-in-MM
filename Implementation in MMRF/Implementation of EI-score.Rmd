@@ -45,7 +45,11 @@ dict=subset(annotLookup,hgnc_symbol %in% gene_list)
 ```
 Read the MMRF per patient data and extract the blood parameters
 ```{r}
-MMRF_blood=read_tsv("/Users/fanyiyang/Desktop/Research/summer/Implementation\ of\ risk\ models/MMRF_CoMMpass_IA21_PER_PATIENT_VISIT.tsv")
+library(readr)
+library(tidyr)
+library(dplyr)
+library(janitor)
+MMRF_blood=read_tsv("./MMRF_CoMMpass_IA21_PER_PATIENT_VISIT.tsv")
 MMRF_bloods=drop_na(subset(MMRF_blood,endsWith(SPECTRUM_SEQ,"_1")==1)[c("D_LAB_chem_ldh","D_LAB_serum_beta2_microglobulin","PUBLIC_ID","SPECTRUM_SEQ")])
 ```
 
@@ -55,7 +59,7 @@ library(readr)
 library(tidyr)
 library(dplyr)
 library(janitor)
-MMRF_TPM=read_tsv("/Users/fanyiyang/Desktop/Research/summer/Implementation\ of\ risk\ models/MMRF_TPM.tsv")
+MMRF_TPM=read_tsv("./MMRF_TPM.tsv")
 TPM_first_visit <- MMRF_TPM %>% dplyr::select("Gene",ends_with("_1_BM_CD138pos"))
 TPM_first_EI = subset(TPM_first_visit,Gene %in% dict$ensembl_gene_id)
 for (i in 1:5){
@@ -128,7 +132,13 @@ MMRF_Survival$risk=ifelse(MMRF_Survival$PUBLIC_ID %in% OS_high_risk, 1, 0) #risk
 library(survival)
 library(ggfortify)
 OS_fit=survfit(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
-autoplot(OS_fit,main="OS of different risk groups categorized by EI score")
+result=survdiff(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
+KM=autoplot(OS_fit,main="OS of different risk groups in MMRF categorized by EI score")+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/MMRF-EI.pdf",
+       device = "pdf")
+write(OS_high_risk, "./Categorization/EI.txt")
 ```
 ```{r}
 survdiff(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)

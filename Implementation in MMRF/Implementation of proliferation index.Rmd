@@ -42,7 +42,7 @@ library(readr)
 library(tidyr)
 library(dplyr)
 library(janitor)
-MMRF_TPM=read_tsv("/Users/fanyiyang/Desktop/Research/summer/Implementation\ of\ risk\ models/MMRF_TPM.tsv")
+MMRF_TPM=read_tsv("./MMRF_TPM.tsv")
 TPM_first_visit <- MMRF_TPM %>% dplyr::select("Gene",ends_with("_1_BM_CD138pos"))
 TPM_first_GPI = subset(TPM_first_visit,Gene %in% dict$ensembl_gene_id)
 for (i in 1:5){
@@ -81,11 +81,18 @@ MMRF_Survival$risk=ifelse(MMRF_Survival$PUBLIC_ID %in% high_risk, 1, 0) #risk=1 
 ```{r}
 library(survival)
 library(ggfortify)
+library(ggpubr)
 OS_fit=survfit(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
-autoplot(OS_fit,main="OS of different risk groups categorized by proliferation index")
+result=survdiff(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
+KM=autoplot(OS_fit,main="OS of different risk groups in MMRF categorized by GPI",ylim = c(0, 1.0))+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/MMRF-GPI.pdf",
+       device = "pdf")
+write(high_risk, "./Categorization/GPI.txt")
 ```
 ```{r}
-survdiff(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
+a=survdiff(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
 ```
 
 

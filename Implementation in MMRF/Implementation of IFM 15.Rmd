@@ -38,7 +38,7 @@ library(readr)
 library(tidyr)
 library(dplyr)
 library(janitor)
-MMRF_TPM=read_tsv("/Users/fanyiyang/Desktop/Research/summer/Implementation\ of\ risk\ models/MMRF_TPM.tsv")
+MMRF_TPM=read_tsv("./MMRF_TPM.tsv")
 TPM_first_visit <- MMRF_TPM %>% dplyr::select("Gene",ends_with("_1_BM_CD138pos"))
 TPM_first_IFM = subset(TPM_first_visit,Gene %in% dict$ensembl_gene_id)
 tidydata=t(TPM_first_IFM)%>%
@@ -58,7 +58,7 @@ scaled_data=scale(tidydata)
 Brainarray mapping
 ```{r}
 library(readr)
-HGU133Plus2_Hs_ENSG_mapping <- read_delim("/Users/fanyiyang/Desktop/Research/summer/Implementation\ of\ risk\ models/HGU133Plus2_Hs_ENSG_mapping.txt", 
+HGU133Plus2_Hs_ENSG_mapping <- read_delim("./HGU133Plus2_Hs_ENSG_mapping.txt", 
                                           delim = "\t", escape_double = FALSE, 
                                           trim_ws = TRUE)
 # View(HGU133Plus2_Hs_ENSG_mapping)
@@ -137,7 +137,7 @@ low_risk=gsub(pattern = "_1_BM_CD138pos",replacement = "",x = low_risk)
 
 Read in the survival data and keep only patients with risk categorization.
 ```{r}
-MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL=read_tsv("/Users/fanyiyang/Desktop/Research/summer/Implementation\ of\ risk\ models/MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL.tsv")
+MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL=read_tsv("./MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL.tsv")
 MMRF_Survival=subset(MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL,PUBLIC_ID %in% high_risk | PUBLIC_ID %in% low_risk)
 MMRF_Survival$risk=ifelse(MMRF_Survival$PUBLIC_ID %in% high_risk, 1, 0) #risk=1 represents high risk
 ```
@@ -154,7 +154,13 @@ survdiff(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
 
 ```{r}
 OS_fit=survfit(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
-autoplot(OS_fit,main="OS of different risk groups categorized by IFM15")
+result=survdiff(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
+KM=autoplot(OS_fit,main="OS of different risk groups in MMRF categorized by IFM-15")+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/MMRF-IFM15.pdf",
+       device = "pdf")
+write(high_risk, "./Categorization/IFM15.txt")
 ```
 ```{r}
 survdiff(Surv(ttcos,censos) ~ risk, data = MMRF_Survival)
