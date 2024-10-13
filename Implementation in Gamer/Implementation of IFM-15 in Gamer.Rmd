@@ -27,7 +27,7 @@ probeset_id=names(weights)
 BioMart mapping
 ```{r}
 library(biomaRt) 
-ensembl = useEnsembl("ensembl",dataset="hsapiens_gene_ensembl",mirror="www") 
+ensembl = useEnsembl("ensembl",dataset="hsapiens_gene_ensembl",mirror="www")
 affy_ensembl= c("affy_hg_u133_plus_2", "ensembl_gene_id","hgnc_symbol")
 dict=getBM(attributes=affy_ensembl, filters="affy_hg_u133_plus_2",values = probeset_id, mart = ensembl)
 ```
@@ -126,8 +126,14 @@ survdiff(Surv(relapse1,relapseE) ~ risk, data = Gamer_Survival)
 ```
 
 ```{r}
-OS_fit=survfit(Surv(death1,deathE) ~ risk, data = Gamer_Survival)
-autoplot(OS_fit,main="OS of different risk groups categorized by IFM15")
+OS_fit=survfit(Surv(relapse1,relapseE) ~ risk, data = Gamer_Survival)
+result=survdiff(Surv(relapse1,relapseE) ~ risk, data = Gamer_Survival)
+KM=autoplot(OS_fit,main="OS of different risk groups in Gamer categorized by IFM-15")+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/Gamer-IFM15.pdf",
+       device = "pdf")
+write(high_risk, "./Categorization/Gamer-IFM15.txt")
 ```
 ```{r}
 survdiff(Surv(death1,deathE) ~ risk, data = Gamer_Survival)

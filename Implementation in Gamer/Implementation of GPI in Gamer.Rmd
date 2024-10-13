@@ -70,8 +70,14 @@ survdiff(Surv(relapse1,relapseE) ~ risk, data = Gamer_Survival)
 ```
 
 ```{r}
-OS_fit=survfit(Surv(death1,deathE) ~ risk, data = Gamer_Survival)
-autoplot(OS_fit,main="OS of different risk groups categorized by GPI")
+OS_fit=survfit(Surv(relapse1,relapseE) ~ risk, data = Gamer_Survival)
+result=survdiff(Surv(relapse1,relapseE) ~ risk, data = Gamer_Survival)
+KM=autoplot(OS_fit,main="OS of different risk groups in Gamer categorized by GPI")+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/Gamer-GPI.pdf",
+       device = "pdf")
+write(high_risk, "./Categorization/Gamer-GPI.txt")
 ```
 ```{r}
 survdiff(Surv(death1,deathE) ~ risk, data = Gamer_Survival)
