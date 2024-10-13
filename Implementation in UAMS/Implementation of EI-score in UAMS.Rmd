@@ -121,8 +121,14 @@ UAMS_Survival$risk=ifelse(UAMS_Survival$subjid %in% OS_high_risk, 1, 0) #risk=1 
 ```
 
 ```{r}
-OS_fit=survfit(Surv(OS,OS_censor) ~ risk, data = UAMS_Survival)
-autoplot(OS_fit,main="OS of different risk groups categorized by IFM15")
+OS_fit=survfit(Surv(EFS,EFS_censor) ~ risk, data = UAMS_Survival)
+result=survdiff(Surv(EFS,EFS_censor) ~ risk, data = UAMS_Survival)
+KM=autoplot(OS_fit,main="OS of different risk groups in UAMS categorized by EI-score")+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/UAMS-EI.pdf",
+       device = "pdf")
+write(OS_high_risk, "./Categorization/UAMS-EI.txt")
 ```
 ```{r}
 survdiff(Surv(OS,OS_censor) ~ risk, data = UAMS_Survival)
