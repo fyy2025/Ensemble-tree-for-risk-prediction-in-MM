@@ -1,0 +1,107 @@
+---
+title: "real data analysis experiment"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+library(intsurv)
+library(survminer)
+library(survival)
+library(readr)
+library(randomForestSRC)
+library(ranger)
+library(alabama)
+library(dplyr)
+```
+
+MMRF
+```{r}
+MMRF_TPM=read_tsv("../Implementation\ in\ MMRF/MMRF_TPM.tsv")
+TPM_first_visit <- MMRF_TPM %>% dplyr::select("Gene",ends_with("_1_BM_CD138pos"))
+TPM_first_EMC = subset(TPM_first_visit,Gene %in% dict$ensembl_gene_id)
+tidydata=t(TPM_first_EMC)%>%
+  row_to_names(row_number=1)
+MMRF_patient=row.names(tidydata)
+MMRF_patient=gsub(pattern = "_1_BM_CD138pos",replacement = "",x = MMRF_patient)
+
+MMRF_partition=as.data.frame(MMRF_patient)%>%
+  rename(patient=MMRF_patient)
+for (signature in c("EMC92", "UAMS17", "UAMS70", "UAMS80", "HM19", "IFM15", "GPI","EI")){
+  path=paste0("../Implementation\ in\ MMRF/Categorization/",signature,".txt")
+  high_risk=read.table(path)
+  MMRF_partition[[signature]]=ifelse(MMRF_partition$patient %in% high_risk$V1,1,0)
+}
+```
+
+
+IFM
+```{r}
+IFM_patient=read_csv("../Implementation\ in\ IFM/TPM_IFM.csv")[["...1"]]
+IFM_patient=gsub(pattern = "_",replacement = "-",x = IFM_patient)
+IFM_patient=substr(IFM_patient,1,nchar(IFM_patient)-2)
+IFM_partition=as.data.frame(IFM_patient)%>%
+  rename(patient=IFM_patient)
+for (signature in c("EMC92", "UAMS17", "UAMS70", "UAMS80", "HM19", "IFM15", "GPI","EI")){
+  path=paste0("../Implementation\ in\ IFM/Categorization/IFM-",signature,".txt")
+  high_risk=read.table(path)
+  IFM_partition[[signature]]=ifelse(IFM_partition$patient %in% high_risk$V1,1,0)
+}
+```
+
+Gamer
+```{r}
+Gamer_patient=read_csv("../Implementation\ in\ Gamer/Gamer_expression.csv")[["...1"]]
+Gamer_partition=as.data.frame(Gamer_patient)%>%
+  rename(patient=Gamer_patient)
+for (signature in c("EMC92", "UAMS17", "UAMS70", "UAMS80", "HM19", "IFM15", "GPI")){
+  path=paste0("../Implementation\ in\ Gamer/Categorization/Gamer-",signature,".txt")
+  high_risk=read.table(path)
+  Gamer_partition[[signature]]=ifelse(Gamer_partition$patient %in% high_risk$V1,1,0)
+}
+
+Gamer_Survival=read_csv("../Implementation\ in\ Gamer/Gamer_Survival.csv")%>%
+  rename(patient=NumInterne)%>%
+  dplyr::select("patient","group")
+
+Gamer_partition_group = merge(Gamer_partition,Gamer_Survival,by="patient")
+mean(rowSums(Gamer_partition[Gamer_partition_group$group=="Group1",-1]))
+mean(rowSums(Gamer_partition[Gamer_partition_group$group=="Group2",-1]))
+mean(rowSums(Gamer_partition[Gamer_partition_group$group=="Group3",-1]))
+```
+UAMS
+```{r}
+UAMS_patient=read_csv("../Implementation\ in\ UAMS/UAMS_expression.csv")[["...1"]]
+UAMS_partition=as.data.frame(UAMS_patient)%>%
+  rename(patient=UAMS_patient)
+for (signature in c("EMC92", "UAMS17", "UAMS70", "UAMS80", "HM19", "IFM15", "GPI","EI")){
+  path=paste0("../Implementation\ in\ UAMS/Categorization/UAMS-",signature,".txt")
+  high_risk=read.table(path)
+  UAMS_partition[[signature]]=ifelse(UAMS_partition$patient %in% high_risk$V1,1,0)
+}
+```
+
+
