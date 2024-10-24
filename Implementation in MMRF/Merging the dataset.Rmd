@@ -42,6 +42,7 @@ library(dplyr)
 EMC_score=read.csv("./EMC_score.csv")
 EI_score=read.csv("./EI_OS_score.csv")
 UAMS_score=read.csv("./UAMS70_score_MMRF.csv")
+UAMS_score$patient=gsub(pattern = "_1_BM_CD138pos",replacement = "",x = UAMS_score$patient)
 GPI_score=read.csv("./GPI_score.csv")
 ```
 
@@ -57,7 +58,9 @@ merged=merge(EMC_score,EI_score,by="patient")%>%
 
 ```{r}
 UAMS17_score=read.csv("./UAMS17_score_MMRF.csv")
+UAMS17_score$patient=gsub(pattern = "_1_BM_CD138pos",replacement = "",x = UAMS17_score$patient)
 UAMS80_score=read.csv("./UAMS80_score_MMRF.csv")
+UAMS80_score$patient=gsub(pattern = "_1_BM_CD138pos",replacement = "",x = UAMS80_score$patient)
 HM19_score=read.csv("./HM_score.csv")
 IFM15_score=read.csv("./IFM_score.csv")
 ```
