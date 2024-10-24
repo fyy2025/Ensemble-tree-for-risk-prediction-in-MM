@@ -118,6 +118,13 @@ score=rep(0,nrow(scaled_data))
 for (i in 1:length(revised_weight)){
   score=score+revised_weight[i]*scaled_data[,revised_ensembl[i]]
 }
+
+```
+
+```{r}
+UAMS_score=data.frame(score)
+UAMS_score$patient=patient
+write.csv(UAMS_score,"UAMS17_score_MMRF.csv",row.names=F)
 ```
 
 ```{r}

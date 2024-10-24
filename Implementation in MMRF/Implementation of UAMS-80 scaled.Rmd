@@ -121,6 +121,12 @@ for (i in 1:length(revised_weight)){
 ```
 
 ```{r}
+UAMS_score=data.frame(score)
+UAMS_score$patient=patient
+write.csv(UAMS_score,"UAMS80_score_MMRF.csv",row.names=F)
+```
+
+```{r}
 cutoff=quantile(score,0.8)
 high_risk=patient[score>=cutoff]
 low_risk=patient[score<cutoff]

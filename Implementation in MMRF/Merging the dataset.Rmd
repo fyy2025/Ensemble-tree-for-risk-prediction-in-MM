@@ -41,7 +41,7 @@ library(dplyr)
 ```{r}
 EMC_score=read.csv("./EMC_score.csv")
 EI_score=read.csv("./EI_OS_score.csv")
-UAMS_score=read.csv("./UAMS_score.csv")
+UAMS_score=read.csv("./UAMS70_score_MMRF.csv")
 GPI_score=read.csv("./GPI_score.csv")
 ```
 
@@ -56,8 +56,8 @@ merged=merge(EMC_score,EI_score,by="patient")%>%
 
 
 ```{r}
-UAMS17_score=read.csv("./UAMS_17_score.csv")
-UAMS80_score=read.csv("./UAMS_80_score.csv")
+UAMS17_score=read.csv("./UAMS17_score_MMRF.csv")
+UAMS80_score=read.csv("./UAMS80_score_MMRF.csv")
 HM19_score=read.csv("./HM_score.csv")
 IFM15_score=read.csv("./IFM_score.csv")
 ```
@@ -81,10 +81,10 @@ MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL=read_tsv("./MMRF_CoMMpass_IA21_STAND_ALO
 ```
 ```{r}
 MMRF=merge(merged2,MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL,by="patient")
-patient_ID=merged_data2$patient
+patient_ID=merged2$patient
 merged_data_MMRF=MMRF[,-1]
 
-write_csv(merged_data_MMRF,"./merged_MMRF_data_continuous_8_pfs.csv")
+write_csv(merged_data_MMRF,"./merged_MMRF_scores.csv")
 ```
 
 ```{r}
