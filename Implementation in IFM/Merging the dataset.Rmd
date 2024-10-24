@@ -87,9 +87,9 @@ merged2=merge(merged,UAMS17_score,by="patient")%>%
 
 ```{r}
 merged_data2=merge(merged2,IFM_Survival,by="patient")
-patient_ID=merged_data2$patient
+patient_ID=merged2$patient
 merged_data_IFM2=merged_data2[,-1]
-write_csv(merged_data_IFM2,"./merged_IFM_data_continuous_8_pfs.csv")
+write_csv(merged_data_IFM2,"./merged_IFM_scores.csv")
 ```
 
 ```{r}
