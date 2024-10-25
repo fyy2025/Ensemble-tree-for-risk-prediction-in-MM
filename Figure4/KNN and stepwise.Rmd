@@ -202,14 +202,15 @@ stepwise_cox <- function(formula, data, direction = "both", datasets = list(MMRF
   custom_loss <- function(model){
     total_event <- 0
     for (i in 1:length(datasets)){
-      total_event = total_event + sum(datasets[[i]]$status)
+      dataset <- datasets[[i]]
+      total_event = total_event + sum(subset(dataset,time>tau)$status)
     }
     
     weighted_ICI <- 0 
     for (i in 1:length(datasets)){
       dataset <- datasets[[i]]
       surv_probs <- survest(model, newdata = dataset, times = tau)$surv
-      weighted_ICI = weighted_ICI + ICI(dataset,1 - surv_probs,tau)*sum(dataset$status)/total_event
+      weighted_ICI = weighted_ICI + ICI(dataset,1 - surv_probs,tau)*sum(subset(dataset,time>tau)$status)/total_event
     }
     return (weighted_ICI)
   }
@@ -267,7 +268,7 @@ for (tau in seq(1,5,0.5)){
 
 MMRF_coef <- as.data.frame(MMRF_coef)
 colnames(MMRF_coef)=c("Signature","1y","1.5y","2y","2.5y","3y","3.5y","4y","4.5y","5y")
-write.csv(MMRF_coef,"MMRF_coefficients.csv")
+write.csv(MMRF_coef,"MMRF_coefficients2.csv")
 ```
 
 IFM
@@ -284,7 +285,7 @@ for (tau in seq(1,5,0.5)){
 
 IFM_coef <- as.data.frame(IFM_coef)
 colnames(IFM_coef)=c("Signature","1y","1.5y","2y","2.5y","3y","3.5y","4y","4.5y","5y")
-write.csv(IFM_coef,"IFM_coefficients.csv")
+write.csv(IFM_coef,"IFM_coefficients2.csv")
 ```
 
 UAMS
@@ -301,7 +302,7 @@ for (tau in seq(1,5,0.5)){
 
 UAMS_coef <- as.data.frame(UAMS_coef)
 colnames(UAMS_coef)=c("Signature","1y","1.5y","2y","2.5y","3y","3.5y","4y","4.5y","5y")
-write.csv(UAMS_coef,"UAMS_coefficients.csv")
+write.csv(UAMS_coef,"UAMS_coefficients2.csv")
 ```
 
 Gamer
@@ -318,7 +319,7 @@ for (tau in seq(1,5,0.5)){
 
 Gamer_coef <- as.data.frame(Gamer_coef)
 colnames(Gamer_coef)=c("Signature","1y","1.5y","2y","2.5y","3y","3.5y","4y","4.5y","5y")
-write.csv(Gamer_coef,"Gamer_coefficients.csv")
+write.csv(Gamer_coef,"Gamer_coefficients2.csv")
 ```
 
 ```{r}
