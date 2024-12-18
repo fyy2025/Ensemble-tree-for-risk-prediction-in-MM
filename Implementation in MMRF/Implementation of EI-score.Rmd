@@ -151,12 +151,26 @@ MMRF_Survival$risk=ifelse(MMRF_Survival$PUBLIC_ID %in% PFS_high_risk, 1, 0) #ris
 ```
 
 ```{r}
+library(survival)
+library(ggfortify)
 PFS_fit=survfit(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
-autoplot(PFS_fit,main="PFS of different risk groups categorized by EI score")
-survdiff(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
+result=survdiff(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
+KM=autoplot(PFS_fit,main="PFS of different risk groups in MMRF categorized by EI score")+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/MMRF-EI-PFS.pdf",
+       device = "pdf")
+write(PFS_high_risk, "./Categorization/EI-PFS.txt")
 ```
 ```{r}
 EI_OS_score=data.frame(OS_score,merged_data$PUBLIC_ID)%>%
   rename("patient"=merged_data.PUBLIC_ID)
-write.csv(EI_OS_score,"EI_OS_score.csv",row.names = F)
+write.csv(EI_OS_score,"./Gene\ signature\ scores/EI_OS_score.csv",row.names = F)
 ```
+
+```{r}
+EI_PFS_score=data.frame(PFS_score,merged_data$PUBLIC_ID)%>%
+  rename("patient"=merged_data.PUBLIC_ID)
+write.csv(EI_PFS_score,"EI_PFS_score.csv",row.names = F)
+```
+
