@@ -146,9 +146,19 @@ IFM_Survival$risk=ifelse(IFM_Survival$subjid %in% PFS_high_risk, 1, 0) #risk=1 r
 
 ```{r}
 PFS_fit=survfit(Surv(TTRelpase,Relapse) ~ risk, data = IFM_Survival)
-autoplot(PFS_fit,main="PFS of different risk groups categorized by EI score")
-survdiff(Surv(TTRelpase,Relapse) ~ risk, data = IFM_Survival)
+result=survdiff(Surv(TTRelpase,Relapse) ~ risk, data = IFM_Survival)
+KM=autoplot(PFS_fit,main="PFS of different risk groups in IFM categorized by EI-score")+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/IFM-EI-PFS.pdf",
+       device = "pdf")
 ```
+```{r}
+EI_PFS_score=data.frame(PFS_score,merged_data$patient)%>%
+  rename("patient"=merged_data.patient)
+write.csv(EI_PFS_score,"EI_PFS_score_IFM.csv",row.names = F)
+```
+
 ```{r}
 EI_OS_score=data.frame(OS_score,merged_data$patient)%>%
   rename("patient"=merged_data.patient)
