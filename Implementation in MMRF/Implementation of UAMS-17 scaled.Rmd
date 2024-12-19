@@ -145,6 +145,17 @@ MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL=read_tsv("./MMRF_CoMMpass_IA21_STAND_ALO
 MMRF_Survival=subset(MMRF_CoMMpass_IA21_STAND_ALONE_SURVIVAL,PUBLIC_ID %in% high_risk | PUBLIC_ID %in% low_risk)
 MMRF_Survival$risk=ifelse(MMRF_Survival$PUBLIC_ID %in% high_risk, 1, 0) #risk=1 represents high risk
 ```
+```{r}
+library(survival)
+library(ggfortify)
+PFS_fit=survfit(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
+result=survdiff(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
+KM=autoplot(PFS_fit,main="PFS of different risk groups in MMRF categorized by UAMS17",ylim = c(0, 1.0))+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/MMRF-UAMS17-PFS.pdf",
+       device = "pdf")
+```
 
 ```{r}
 library(survival)

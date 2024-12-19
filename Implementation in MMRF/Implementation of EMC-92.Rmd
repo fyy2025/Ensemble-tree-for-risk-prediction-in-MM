@@ -143,13 +143,16 @@ MMRF_Survival$risk=ifelse(MMRF_Survival$PUBLIC_ID %in% high_risk, 1, 0) #risk=1 
 ```
 
 ```{r}
-# library(survival)
-# library(ggfortify)
-# PFS_fit=survfit(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
-# autoplot(PFS_fit,main="PFS of different risk groups categorized by EMC-92")
-# ```
-# ```{r}
-# survdiff(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
+library(survival)
+library(ggfortify)
+PFS_fit=survfit(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
+result=survdiff(Surv(ttcpfs,censpfs) ~ risk, data = MMRF_Survival)
+KM=autoplot(PFS_fit,main="PFS of different risk groups in MMRF categorized by EMC-92")+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/MMRF-EMC92-PFS.pdf",
+       device = "pdf")
+# write(high_risk, "./Categorization/EMC92-PFS.txt")
 ```
 
 ```{r}
