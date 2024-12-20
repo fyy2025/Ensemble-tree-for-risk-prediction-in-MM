@@ -39,6 +39,7 @@ library(dplyr)
 ```
 
 ```{r}
+setwd("./Gene\ signature\ scores")
 EMC_score=read.csv("./EMC92_score_Gamer.csv")
 # EI_score=read.csv("./EI_OS_score_Gamer.csv")
 UAMS_score=read.csv("./UAMS70_score_Gamer.csv")
@@ -74,6 +75,7 @@ merged_data_Gamer=merged_data[,-1]
 ```
 
 ```{r}
+setwd("./Gene\ signature\ scores")
 UAMS17_score=read.csv("./UAMS17_score_Gamer.csv")
 UAMS80_score=read.csv("./UAMS80_score_Gamer.csv")
 HM19_score=read.csv("./HM19_score_Gamer.csv")
@@ -92,26 +94,187 @@ merged2=merge(merged,UAMS17_score,by="patient")%>%
 ```
 
 ```{r}
-merged_data2=merge(merged2,Gamer_Survival,by="patient")
-patient_ID=merged_data2$patient
-merged_data_Gamer2=merged_data2[,-1]
-write_csv(merged_data_Gamer2,"./Gamer_7_continuous.csv")
+# merged_data2=merge(merged2,Gamer_Survival,by="patient")
+# patient_ID=merged_data2$patient
+# merged_data_Gamer2=merged_data2[,-1]
+# write_csv(merged_data_Gamer2,"./Gamer_7_continuous.csv")
 ```
 
 ```{r}
-del17p=read_csv("./DNA\ markers/cohort_export_baseline_del17p.csv")
-delCDKN2C=read_csv("./DNA\ markers/cohort_export_baseline_delCDKN2C.csv")
-gain1q21=read_csv("./DNA\ markers/cohort_export_baseline_gain1q21.csv")
-delt414=read_csv("./DNA\ markers/cohort_export_baseline_t414.csv")
-delt1416=read_csv("./DNA\ markers/cohort_export_baseline_t1416.csv")
+binary=merged2
+count=rep(0,nrow(binary))
+for (i in 2:ncol(binary)){
+  threshold=quantile(binary[,i],0.8)
+  binary[,i]=ifelse(binary[,i]>threshold,1,0)
+  count=count+binary[,i]
+}
+binary$count=count
 ```
+```{r}
+library(viridis)
+positive_count=subset(binary,count>0)
+positive_count=positive_count[order(positive_count$count, decreasing = TRUE), ]
+barplot(positive_count$count)
+
+long_df <- positive_count[,-9] |> pivot_longer(cols = colnames(positive_count)[-c(1,9)], names_to = "X", values_to = "Z")
+long_df$patient=factor(long_df$patient,levels=unique(long_df$patient))
+library(ggplot2)
+long_df |> ggplot(aes(patient, X, fill = Z)) + geom_tile()+scale_fill_viridis()
+```
+
 
 
 ```{r}
-cor(merged_data_Gamer2[,1:8])
-```
-```{r}
-UAMS=merged_data2
-hist(UAMS$TTRelpase)
+# Gamer=merge(binary,Gamer_Survival,by="patient")
+# Gamer$risk=ifelse(Gamer$count>5,1,ifelse(Gamer$count>2,2,3))
+# 
+# PFS_fit=survfit(Surv(relapse1,relapseE) ~ risk, data = Gamer)
+# result=survdiff(Surv(relapse1,relapseE) ~ risk, data = Gamer)
+# autoplot(PFS_fit,main="PFS of different risk groups in Gamer categorized by \nthe number of signatures indicating high risk",conf.int = F)+
+#   ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)+
+#   guides(fill=FALSE) +
+#   labs(colour = "Number") +
+#   scale_color_manual(labels = c("6,7,8", "3,4,5","0,1,2"), values = c(1, 2,3))
+# 
+# OS_fit=survfit(Surv(time,status) ~ risk, data = Gamer)
+# result=survdiff(Surv(time,status) ~ risk, data = Gamer)
+# autoplot(OS_fit,main="OS of different risk groups in Gamer categorized by \nthe number of signatures indicating high risk",conf.int = F)+
+#   ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)+
+#   guides(fill=FALSE) +
+#   labs(colour = "Numer") +
+#   scale_color_manual(labels = c("6,7,8", "3,4,5","0,1,2"), values = c(1, 2,3))
 ```
 
+```{r}
+# del17p=read_csv("./DNA\ markers/cohort_export_baseline_del17p.csv")
+# delCDKN2C=read_csv("./DNA\ markers/cohort_export_baseline_delCDKN2C.csv")
+# gain1q21=read_csv("./DNA\ markers/cohort_export_baseline_gain1q21.csv")
+# delt414=read_csv("./DNA\ markers/cohort_export_baseline_t414.csv")
+# delt1416=read_csv("./DNA\ markers/cohort_export_baseline_t1416.csv")
+```
+
+```{r}
+Gamer=merge(binary,Gamer_Survival,by="patient")
+Gamer$risk=ifelse(Gamer$count>5,1,ifelse(Gamer$count>2,2,3))
+```
+
+```{r}
+# positive_count$patient=gsub(pattern = "_",replacement = "",x = positive_count$patient)
+# positive_count$del17p=ifelse(positive_count$patient %in% del17p$Patient,1,0)
+# positive_count$delCDKN2C=ifelse(positive_count$patient %in% delCDKN2C$Patient,1,0)
+# positive_count$gain1q21=ifelse(positive_count$patient %in% gain1q21$Patient,1,0)
+# positive_count$delt414=ifelse(positive_count$patient %in% delt414$Patient,1,0)
+# positive_count$delt1416=ifelse(positive_count$patient %in% delt1416$Patient,1,0)
+```
+
+```{r}
+positive_count=positive_count[order(positive_count$count, decreasing = TRUE), ]
+long_df2 <- positive_count[,c(1,11:15)] |> pivot_longer(cols = colnames(positive_count)[11:15], names_to = "X", values_to = "Z")
+long_df2$patient=factor(long_df2$patient,levels=unique(long_df2$patient))
+long_df2 |> ggplot(aes(patient, X, fill = Z)) + geom_tile() +scale_fill_viridis()
+```
+
+Risk Table
+```{r}
+### This is a data frame with 3 columns,
+### time: should be PFS or OS time depending your KM plot. Please convert your time to months if it is coded as days or years
+### event: should be your censor information, by default 1 is event observed, 0 ins censor
+### group: should be you sample groupings like mutation present vs. WT vs. deletion etc.
+library(rawr)
+Gamer$risk=ifelse(Gamer$count>5,1,ifelse(Gamer$count>2,2,ifelse(Gamer$count>0,3,4)))
+survData <- Gamer[,c(12,13,14)]
+colnames(survData) <- c("Time","Event","Class")
+survData$Time=survData$Time/30.42
+table(survData$Class)
+
+survData <- na.omit(survData)
+
+### This function will create survival curves and create survfit object required for plotting below.
+### It simply use the data frame generated above
+surv.fit <- survfit (Surv(Time,Event)~ Class, data=survData)
+paircomp_OS <- coxph_pairs(Surv(Time,Event)~ Class, data=survData)
+
+### ggsurvplot funtion creates KM plot and risk table in JCO format. 
+### Please do not change the palette option
+### It takes survival curves and data table generated above
+### If your data has a short follow up you may consider adjusting break.time.by = 6 to add a risk table entry for every 6 months instead of 12 months 
+ggsurv <- ggsurvplot(
+  surv.fit,                     # survfit object with calculated statistics.
+  data = survData,             # data used to fit survival   curves.
+  risk.table = TRUE,       # show risk table.
+  tables.theme = clean_theme(),
+  pval = TRUE,             # show p-value of log-rank test.
+  pval.coord = c(-0.75,0.20),
+  #  conf.int = TRUE,         # show confidence intervals for 
+  # point estimates of survival curves.
+  palette = "jco",
+  # survival estimates.
+  xlab = "Time in months",   # customize X axis label. 
+  ylab = " OS probability",
+  break.time.by = 12,     # break X axis in time intervals by 500.
+  ggtheme = theme_light(), # customize plot and risk table with a theme.
+  risk.table.y.text.col = T,# color risk table text annotations.
+  risk.table.height = 0.25, # the height of the risk table
+  risk.table.y.text = FALSE,# show bars instead of names in text annotations
+  # in legend of risk table.
+  conf.int.style = "step",  # customize style of confidence intervals
+  surv.median.line = "hv",  # add the median survival pointer.
+  #legend.labs = c("All t(14;16)","Non high-risk t(14;16)","Non t(14;16)"),    # change legend labels, please double check your edited labels here and your input data!!
+  #palette = c("#CD534CFF","#0073C2FF","#EFC000FF","#6a994e")
+)
+
+### Double check your KM plot
+print(ggsurv)
+```
+Risk Table for PFS
+```{r}
+### This is a data frame with 3 columns,
+### time: should be PFS or OS time depending your KM plot. Please convert your time to months if it is coded as days or years
+### event: should be your censor information, by default 1 is event observed, 0 ins censor
+### group: should be you sample groupings like mutation present vs. WT vs. deletion etc.
+library(rawr)
+Gamer$risk=ifelse(Gamer$count>5,1,ifelse(Gamer$count>2,2,ifelse(Gamer$count>0,3,4)))
+survData <- Gamer[,c(10,11,14)]
+colnames(survData) <- c("Time","Event","Class")
+survData$Time=survData$Time/30.42
+table(survData$Class)
+
+survData <- na.omit(survData)
+
+### This function will create survival curves and create survfit object required for plotting below.
+### It simply use the data frame generated above
+surv.fit <- survfit (Surv(Time,Event)~ Class, data=survData)
+paircomp_OS <- coxph_pairs(Surv(Time,Event)~ Class, data=survData)
+
+### ggsurvplot funtion creates KM plot and risk table in JCO format. 
+### Please do not change the palette option
+### It takes survival curves and data table generated above
+### If your data has a short follow up you may consider adjusting break.time.by = 6 to add a risk table entry for every 6 months instead of 12 months 
+ggsurv <- ggsurvplot(
+  surv.fit,                     # survfit object with calculated statistics.
+  data = survData,             # data used to fit survival   curves.
+  risk.table = TRUE,       # show risk table.
+  tables.theme = clean_theme(),
+  pval = TRUE,             # show p-value of log-rank test.
+  pval.coord = c(-0.75,0.20),
+  #  conf.int = TRUE,         # show confidence intervals for 
+  # point estimates of survival curves.
+  palette = "jco",
+  # survival estimates.
+  xlab = "Time in months",   # customize X axis label. 
+  ylab = " PFS probability",
+  break.time.by = 12,     # break X axis in time intervals by 500.
+  ggtheme = theme_light(), # customize plot and risk table with a theme.
+  risk.table.y.text.col = T,# color risk table text annotations.
+  risk.table.height = 0.25, # the height of the risk table
+  risk.table.y.text = FALSE,# show bars instead of names in text annotations
+  # in legend of risk table.
+  conf.int.style = "step",  # customize style of confidence intervals
+  surv.median.line = "hv",  # add the median survival pointer.
+  #legend.labs = c("All t(14;16)","Non high-risk t(14;16)","Non t(14;16)"),    # change legend labels, please double check your edited labels here and your input data!!
+  #palette = c("#CD534CFF","#0073C2FF","#EFC000FF","#6a994e")
+)
+
+### Double check your KM plot
+print(ggsurv)
+```
