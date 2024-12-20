@@ -123,17 +123,17 @@ delt414=read_csv("./DNA\ markers/cohort_export_baseline_t414.csv")
 delt1416=read_csv("./DNA\ markers/cohort_export_baseline_t1416.csv")
 ```
 ```{r}
-MMRF$patient=gsub(pattern = "_",replacement = "",x = MMRF$patient)
-MMRF$del17p=ifelse(MMRF$patient %in% del17p$Patient,1,0)
-MMRF$delCDKN2C=ifelse(MMRF$patient %in% delCDKN2C$Patient,1,0)
-MMRF$gain1q21=ifelse(MMRF$patient %in% gain1q21$Patient,1,0)
-MMRF$delt414=ifelse(MMRF$patient %in% delt414$Patient,1,0)
-MMRF$delt1416=ifelse(MMRF$patient %in% delt1416$Patient,1,0)
+positive_count$patient=gsub(pattern = "_",replacement = "",x = positive_count$patient)
+positive_count$del17p=ifelse(positive_count$patient %in% del17p$Patient,1,0)
+positive_count$delCDKN2C=ifelse(positive_count$patient %in% delCDKN2C$Patient,1,0)
+positive_count$gain1q21=ifelse(positive_count$patient %in% gain1q21$Patient,1,0)
+positive_count$delt414=ifelse(positive_count$patient %in% delt414$Patient,1,0)
+positive_count$delt1416=ifelse(positive_count$patient %in% delt1416$Patient,1,0)
 ```
 
 ```{r}
-MMRF=MMRF[order(MMRF$count, decreasing = TRUE), ]
-long_df2 <- MMRF[,c(1,16:20)] |> pivot_longer(cols = colnames(MMRF)[16:20], names_to = "X", values_to = "Z")
+positive_count=positive_count[order(positive_count$count, decreasing = TRUE), ]
+long_df2 <- positive_count[,c(1,11:15)] |> pivot_longer(cols = colnames(positive_count)[11:15], names_to = "X", values_to = "Z")
 long_df2$patient=factor(long_df2$patient,levels=unique(long_df2$patient))
 long_df2 |> ggplot(aes(patient, X, fill = Z)) + geom_tile() +scale_fill_viridis()
 ```
