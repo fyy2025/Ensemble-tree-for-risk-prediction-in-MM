@@ -199,6 +199,7 @@ paircomp_OS <- coxph_pairs(Surv(Time,Event)~ Class, data=survData)
 ### It takes survival curves and data table generated above
 ### If your data has a short follow up you may consider adjusting break.time.by = 6 to add a risk table entry for every 6 months instead of 12 months 
 ggsurv <- ggsurvplot(
+  title = "Overall Survival for Gamer dataset",
   surv.fit,                     # survfit object with calculated statistics.
   data = survData,             # data used to fit survival   curves.
   risk.table = TRUE,       # show risk table.
@@ -219,7 +220,7 @@ ggsurv <- ggsurvplot(
   # in legend of risk table.
   conf.int.style = "step",  # customize style of confidence intervals
   surv.median.line = "hv",  # add the median survival pointer.
-  #legend.labs = c("All t(14;16)","Non high-risk t(14;16)","Non t(14;16)"),    # change legend labels, please double check your edited labels here and your input data!!
+  legend.labs = c(">5 signatures","3-5 signatures","1-2 signatures","0 signatures"),    # change legend labels, please double check your edited labels here and your input data!!
   #palette = c("#CD534CFF","#0073C2FF","#EFC000FF","#6a994e")
 )
 
@@ -251,6 +252,7 @@ paircomp_OS <- coxph_pairs(Surv(Time,Event)~ Class, data=survData)
 ### It takes survival curves and data table generated above
 ### If your data has a short follow up you may consider adjusting break.time.by = 6 to add a risk table entry for every 6 months instead of 12 months 
 ggsurv <- ggsurvplot(
+  title = "Progression-Free Survival for Gamer dataset",
   surv.fit,                     # survfit object with calculated statistics.
   data = survData,             # data used to fit survival   curves.
   risk.table = TRUE,       # show risk table.
@@ -271,7 +273,7 @@ ggsurv <- ggsurvplot(
   # in legend of risk table.
   conf.int.style = "step",  # customize style of confidence intervals
   surv.median.line = "hv",  # add the median survival pointer.
-  #legend.labs = c("All t(14;16)","Non high-risk t(14;16)","Non t(14;16)"),    # change legend labels, please double check your edited labels here and your input data!!
+  legend.labs = c(">5 signatures","3-5 signatures","1-2 signatures","0 signatures"),    # change legend labels, please double check your edited labels here and your input data!!
   #palette = c("#CD534CFF","#0073C2FF","#EFC000FF","#6a994e")
 )
 

@@ -107,34 +107,6 @@ PFS_score=PFS_score+ifelse(merged_data$TGFB1>0.43,1,0)
 PFS_score=PFS_score+ifelse(merged_data$TGFB3>0.03,1,0)
 ```
 
-
-```{r}
-OS_cutoff=quantile(OS_score,0.8)
-OS_high_risk=merged_data$subjid[OS_score>=OS_cutoff]
-OS_low_risk=merged_data$subjid[OS_score<OS_cutoff]
-```
-
-Read in the survival data and keep only patients with risk categorization.
-```{r}
-UAMS_Survival=subset(UAMS_Survival,subjid %in% OS_high_risk | subjid %in% OS_low_risk)
-UAMS_Survival$risk=ifelse(UAMS_Survival$subjid %in% OS_high_risk, 1, 0) #risk=1 represents high risk
-```
-
-```{r}
-OS_fit=survfit(Surv(EFS,EFS_censor) ~ risk, data = UAMS_Survival)
-result=survdiff(Surv(EFS,EFS_censor) ~ risk, data = UAMS_Survival)
-KM=autoplot(OS_fit,main="OS of different risk groups in UAMS categorized by EI-score")+
-  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
-ggsave(KM, 
-       filename = "./KM\ curves/UAMS-EI.pdf",
-       device = "pdf")
-write(OS_high_risk, "./Categorization/UAMS-EI.txt")
-```
-```{r}
-survdiff(Surv(OS,OS_censor) ~ risk, data = UAMS_Survival)
-```
-
-
 ```{r}
 PFS_cutoff=quantile(PFS_score,0.8)
 PFS_high_risk=merged_data$subjid[PFS_score>=PFS_cutoff]
@@ -151,14 +123,59 @@ UAMS_Survival=subset(UAMS_Survival,subjid %in% PFS_high_risk | subjid %in% PFS_l
 UAMS_Survival$risk=ifelse(UAMS_Survival$subjid %in% PFS_high_risk, 1, 0) #risk=1 represents high risk
 ```
 
+```{r}
+library(survival)
+library(ggfortify)
+UAMS_Survival$EFS=UAMS_Survival$EFS*30.42
+UAMS_Survival$OS=UAMS_Survival$OS*30.42
+PFS_fit=survfit(Surv(EFS,EFS_censor) ~ risk, data = UAMS_Survival)
+result=survdiff(Surv(EFS,EFS_censor) ~ risk, data = UAMS_Survival)
+KM=autoplot(PFS_fit,main="PFS of different risk groups in UAMS categorized by EI score")+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/UAMS-EI-PFS.pdf",
+       device = "pdf")
+write(high_risk, "./Categorization/UAMS-EI-PFS.txt")
+```
 
 ```{r}
-PFS_fit=survfit(Surv(EFS,EFS_censor) ~ risk, data = UAMS_Survival)
-autoplot(PFS_fit,main="PFS of different risk groups categorized by EI score")
-survdiff(Surv(EFS,EFS_censor) ~ risk, data = UAMS_Survival)
+OS_cutoff=quantile(OS_score,0.8)
+OS_high_risk=merged_data$subjid[OS_score>=OS_cutoff]
+OS_low_risk=merged_data$subjid[OS_score<OS_cutoff]
 ```
+
+```{r}
+UAMS_Survival=read_excel("./GSE24080_MM_UAMS565_ClinInfo_27Jun2008_LS_clean.xls")%>%
+  rename(subjid=CELfilename,OS=`OS (months)`,EFS=`EFS(months)`,EFS_censor=`EFS-censor`,OS_censor=`OS-censor`)
+```
+
+Read in the survival data and keep only patients with risk categorization.
+```{r}
+UAMS_Survival=subset(UAMS_Survival,subjid %in% OS_high_risk | subjid %in% OS_low_risk)
+UAMS_Survival$risk=ifelse(UAMS_Survival$subjid %in% OS_high_risk, 1, 0) #risk=1 represents high risk
+```
+
+```{r}
+UAMS_Survival$EFS=UAMS_Survival$EFS*30.42
+UAMS_Survival$OS=UAMS_Survival$OS*30.42
+OS_fit=survfit(Surv(OS,OS_censor) ~ risk, data = UAMS_Survival)
+result=survdiff(Surv(OS,OS_censor) ~ risk, data = UAMS_Survival)
+KM=autoplot(OS_fit,main="OS of different risk groups in UAMS categorized by EI score",xlim=c(0,3000))+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/UAMS-EI.pdf",
+       device = "pdf")
+write(high_risk, "./Categorization/UAMS-EI-OS.txt")
+```
+
 ```{r}
 EI_OS_score=data.frame(OS_score,merged_data$subjid)%>%
   rename("patient"=merged_data.subjid)
 write.csv(EI_OS_score,"EI_OS_score_UAMS.csv",row.names = F)
+```
+
+```{r}
+EI_PFS_score=data.frame(PFS_score,merged_data$subjid)%>%
+  rename("patient"=merged_data.subjid)
+write.csv(EI_OS_score,"EI_PFS_score_UAMS.csv",row.names = F)
 ```

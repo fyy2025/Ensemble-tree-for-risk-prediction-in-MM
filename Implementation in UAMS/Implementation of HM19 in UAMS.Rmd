@@ -31,7 +31,7 @@ library(readr)
 library(tidyr)
 library(dplyr)
 library(janitor)
-UAMS=read_csv("./UAMS_expression.csv")
+# UAMS=read_csv("./UAMS_expression.csv")
 patient=UAMS[["...1"]]
 tidydata=UAMS[,names(UAMS)%in%probeset_id]
 tidydata=as.data.frame(tidydata)
@@ -67,17 +67,24 @@ UAMS_Survival$risk=ifelse(UAMS_Survival$subjid %in% high_risk, 1, 0) #risk=1 rep
 ```{r}
 library(survival)
 library(ggfortify)
+UAMS_Survival$EFS=UAMS_Survival$EFS*30.42
+UAMS_Survival$OS=UAMS_Survival$OS*30.42
 PFS_fit=survfit(Surv(EFS,EFS_censor) ~ risk, data = UAMS_Survival)
-autoplot(PFS_fit,main="PFS of different risk groups categorized by HM19")
+result=survdiff(Surv(EFS,EFS_censor) ~ risk, data = UAMS_Survival)
+KM=autoplot(PFS_fit,main="PFS of different risk groups in UAMS categorized by HM-19")+
+  ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
+ggsave(KM, 
+       filename = "./KM\ curves/UAMS-HM19-PFS.pdf",
+       device = "pdf")
 ```
 ```{r}
 survdiff(Surv(EFS,EFS_censor) ~ risk, data = UAMS_Survival)
 ```
 
 ```{r}
-OS_fit=survfit(Surv(EFS,EFS_censor) ~ risk, data = UAMS_Survival)
-result=survdiff(Surv(EFS,EFS_censor) ~ risk, data = UAMS_Survival)
-KM=autoplot(OS_fit,main="OS of different risk groups in UAMS categorized by HM-19")+
+OS_fit=survfit(Surv(OS,OS_censor) ~ risk, data = UAMS_Survival)
+result=survdiff(Surv(OS,OS_censor) ~ risk, data = UAMS_Survival)
+KM=autoplot(OS_fit,main="OS of different risk groups in UAMS categorized by HM-19",xlim=c(0,3000))+
   ggplot2::annotate("text", x = 10, y = 0.01, label = paste0("pvalue: ", sprintf("%.2e", result$pvalue)) , size = 3, hjust = 0)
 ggsave(KM, 
        filename = "./KM\ curves/UAMS-HM19.pdf",
