@@ -11,31 +11,14 @@ knitr::opts_chunk$set(echo = TRUE)
 
 This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
-```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
 
 ```{r}
 library(intsurv)
 library(survminer)
 library(survival)
 library(readr)
-library(randomForestSRC)
-library(ranger)
-library(alabama)
 library(dplyr)
+library(tidyr)
 ```
 
 ```{r}
@@ -61,10 +44,10 @@ merged=EMC_score%>%
 ```{r}
 Gamer_Survival=read_csv("./Gamer_Survival.csv")%>%
   rename(patient=NumInterne)%>%
-  dplyr::select(patient,relapse1,relapseE,death1,deathE)
+  dplyr::select(patient,relapse1,relapseE,death1,deathE,group)
 
-Gamer_Survival$relapse1=Gamer_Survival$relapse1*30
-Gamer_Survival$death1=Gamer_Survival$death1*30
+Gamer_Survival$relapse1=Gamer_Survival$relapse1*30.42
+Gamer_Survival$death1=Gamer_Survival$death1*30.42
 ```
 
 ```{r}
@@ -94,14 +77,14 @@ merged2=merge(merged,UAMS17_score,by="patient")%>%
 ```
 
 ```{r}
-# merged_data2=merge(merged2,Gamer_Survival,by="patient")
-# patient_ID=merged_data2$patient
-# merged_data_Gamer2=merged_data2[,-1]
+merged_data2=merge(merged2,Gamer_Survival,by="patient")
+patient_ID=merged_data2$patient
+merged_data_Gamer2=merged_data2[,-1]
 # write_csv(merged_data_Gamer2,"./Gamer_7_continuous.csv")
 ```
 
 ```{r}
-binary=merged2
+binary=subset(merged_data2,group=="Group1")[,1:8]
 count=rep(0,nrow(binary))
 for (i in 2:ncol(binary)){
   threshold=quantile(binary[,i],0.8)
@@ -109,19 +92,75 @@ for (i in 2:ncol(binary)){
   count=count+binary[,i]
 }
 binary$count=count
+high_risk=subset(binary,count>5)$patient
+write.csv(high_risk,"./Gamer1_gt5.csv")
 ```
+
+
 ```{r}
-library(viridis)
-positive_count=subset(binary,count>0)
-positive_count=positive_count[order(positive_count$count, decreasing = TRUE), ]
-barplot(positive_count$count)
-
-long_df <- positive_count[,-9] |> pivot_longer(cols = colnames(positive_count)[-c(1,9)], names_to = "X", values_to = "Z")
-long_df$patient=factor(long_df$patient,levels=unique(long_df$patient))
-library(ggplot2)
-long_df |> ggplot(aes(patient, X, fill = Z)) + geom_tile()+scale_fill_viridis()
+signature_plot=function(binary,yaxis=F){
+  count=rep(0,nrow(binary))
+  for (i in 2:ncol(binary)){
+    threshold=quantile(binary[,i],0.8)
+    binary[,i]=ifelse(binary[,i]>threshold,1,0)
+    count=count+binary[,i]
+  }
+  binary$count=count
+  
+  #,fig.width=4, fig.height=4
+  library(viridis)
+  positive_count=subset(binary,count>0)
+  positive_count=positive_count[order(positive_count$count, decreasing = TRUE), ]
+  positive_count$patient <- factor(positive_count$patient, levels = positive_count$patient)
+  if(yaxis==T){
+    bar=ggplot(positive_count,aes(x=patient,y=count))+
+      geom_bar(stat="identity",width=0.6)+
+      labs(x = "Patient", y = "Count") +
+      theme(axis.text.x=element_blank(),axis.title.x=element_blank(),axis.ticks = element_blank(),legend.position="none")
+  }
+  else{
+    bar=ggplot(positive_count,aes(x=patient,y=count))+
+      geom_bar(stat="identity",width=0.6)+
+      # labs(title = "Bar Plot ordered by the count of signatures indicating high risk", x = "Patient", y = "Count") +
+      theme(axis.text.x=element_blank(),axis.title.x=element_blank(),axis.text.y=element_blank(),axis.title.y=element_blank(),axis.ticks = element_blank(),legend.position="none")
+  }
+  num=nrow(positive_count)
+  
+  long_df <- positive_count[,-9] |> pivot_longer(cols = colnames(positive_count)[-c(1,9)], names_to = "X", values_to = "Z")
+  long_df$patient=factor(long_df$patient,levels=unique(long_df$patient))
+  library(ggplot2)
+  if (yaxis==T){
+    plot=long_df |> ggplot(aes(patient, X, fill = as.factor(Z))) + geom_tile()+
+      scale_fill_viridis_d()+
+      coord_fixed(ratio = 2) +
+      labs(y="Signature",x="Patient") +
+      theme(axis.text.x=element_blank(),axis.ticks = element_blank(),legend.position="none")
+  }
+  else{
+    plot=long_df |> ggplot(aes(patient, X, fill = as.factor(Z))) + geom_tile()+
+      scale_fill_viridis_d()+
+      coord_fixed(ratio = 2) +
+      # labs(fill = "High Risk",y="Signature",x="Patient") +
+      theme(axis.text.x=element_blank(),axis.title.x=element_blank(),axis.text.y=element_blank(),axis.title.y=element_blank(),axis.ticks = element_blank(),legend.position="none")
+  }
+  return(list(bar,plot,num))
+}
 ```
 
+```{r}
+binary=subset(merged_data2,group=="Group3")[,1:8]
+group3=signature_plot(binary)
+binary=subset(merged_data2,group=="Group2")[,1:8]
+group2=signature_plot(binary)
+binary=subset(merged_data2,group=="Group1")[,1:8]
+group1=signature_plot(binary,yaxis=T)
+```
+
+
+```{r}
+library(egg)
+egg::ggarrange(group1[[1]],group2[[1]], group3[[1]],ncol=3,nrow=1,widths = c(1, num2/num1,num3/num1))
+```
 
 
 ```{r}
@@ -146,33 +185,74 @@ long_df |> ggplot(aes(patient, X, fill = Z)) + geom_tile()+scale_fill_viridis()
 ```
 
 ```{r}
-# del17p=read_csv("./DNA\ markers/cohort_export_baseline_del17p.csv")
-# delCDKN2C=read_csv("./DNA\ markers/cohort_export_baseline_delCDKN2C.csv")
-# gain1q21=read_csv("./DNA\ markers/cohort_export_baseline_gain1q21.csv")
-# delt414=read_csv("./DNA\ markers/cohort_export_baseline_t414.csv")
-# delt1416=read_csv("./DNA\ markers/cohort_export_baseline_t1416.csv")
+library(readxl)
+DNAmarker=read_xlsx("./data_Gamer/Gamer_samples.xlsx")
 ```
 
 ```{r}
-Gamer=merge(binary,Gamer_Survival,by="patient")
-Gamer$risk=ifelse(Gamer$count>5,1,ifelse(Gamer$count>2,2,3))
+DNAMarker_plot=function(binary,yaxis=F){
+  count=rep(0,nrow(binary))
+  for (i in 2:ncol(binary)){
+    threshold=quantile(binary[,i],0.8)
+    binary[,i]=ifelse(binary[,i]>threshold,1,0)
+    count=count+binary[,i]
+  }
+  binary$count=count
+  positive_count=subset(binary,count>0)
+  positive_count=positive_count[order(positive_count$count, decreasing = TRUE), ]
+  
+  positive_count$del1p32=ifelse(positive_count$patient %in% DNAmarker$del1p32samples,1,0)
+  positive_count$TP53=ifelse(positive_count$patient %in% DNAmarker$TP53mutation,1,0)
+  positive_count$gain1q=ifelse(positive_count$patient %in% DNAmarker$gain1q,1,0)
+  positive_count$del17p=ifelse(positive_count$patient %in% DNAmarker$del17p,1,0)
+  positive_count$t1416=ifelse(positive_count$patient %in% DNAmarker$t1416samples,1,0)
+  positive_count$t414=ifelse(positive_count$patient %in% DNAmarker$t414samples,1,0)
+  
+  positive_count=positive_count[order(positive_count$count, decreasing = TRUE), ]
+  positive_subgroup=positive_count
+  long_df2 <- positive_subgroup[,c(1,10:15)] |> pivot_longer(cols = colnames(positive_count)[10:15], names_to = "DNAmarker", values_to = "Z")
+  long_df2$patient=factor(long_df2$patient,levels=unique(long_df2$patient))
+  long_df2$Z=factor(long_df2$Z)
+  if(yaxis==T){
+    plot=long_df2 |> ggplot(aes(patient, DNAmarker, fill = as.factor(Z))) + geom_tile()+
+      scale_fill_viridis_d()+
+      coord_fixed(ratio = 2) +
+      labs(y="DNA Marker",x="Patient") +
+      theme(axis.text.x=element_blank(),axis.ticks = element_blank(),legend.position="none")
+  }
+  else{
+    plot=long_df2 |> ggplot(aes(patient, DNAmarker, fill = as.factor(Z))) + geom_tile()+
+      scale_fill_viridis_d()+
+      coord_fixed(ratio = 2) +
+      # labs(fill = "High Risk",y="Signature",x="Patient") +
+      theme(axis.text.x=element_blank(),axis.title.x=element_blank(),axis.text.y=element_blank(),axis.title.y=element_blank(),axis.ticks = element_blank(),legend.position="none")
+  }
+  return(plot)
+}
+```
+```{r}
+binary=subset(merged_data2,group=="Group3")[,1:8]
+plot6=DNAMarker_plot(binary)
+binary=subset(merged_data2,group=="Group2")[,1:8]
+plot5=DNAMarker_plot(binary)
+binary=subset(merged_data2,group=="Group1")[,1:8]
+plot4=DNAMarker_plot(binary,yaxis=T)
+
+egg::ggarrange(plot4,plot5, plot6,ncol=3,nrow=1,widths = c(1, num2/num1,num3/num1))
+
+Gamer_summary=egg::ggarrange(group1[[1]],group2[[1]], group3[[1]],group1[[2]],group2[[2]], group3[[2]],plot4,plot5,plot6,ncol=3,nrow=3,widths = c(1, num2/num1,num3/num1),heights=c(0.1,1,1))
+```
+```{r}
+dev.print(Gamer_summary,"./Gamer.pdf")
 ```
 
 ```{r}
-# positive_count$patient=gsub(pattern = "_",replacement = "",x = positive_count$patient)
-# positive_count$del17p=ifelse(positive_count$patient %in% del17p$Patient,1,0)
-# positive_count$delCDKN2C=ifelse(positive_count$patient %in% delCDKN2C$Patient,1,0)
-# positive_count$gain1q21=ifelse(positive_count$patient %in% gain1q21$Patient,1,0)
-# positive_count$delt414=ifelse(positive_count$patient %in% delt414$Patient,1,0)
-# positive_count$delt1416=ifelse(positive_count$patient %in% delt1416$Patient,1,0)
+ISS=read_csv("./Gamer_Survival.csv")%>%
+  rename(patient=NumInterne)%>%
+  dplyr::select(patient,ISS)
+iss_info=merge(positive_subgroup,ISS,by="patient")
 ```
 
-```{r}
-positive_count=positive_count[order(positive_count$count, decreasing = TRUE), ]
-long_df2 <- positive_count[,c(1,11:15)] |> pivot_longer(cols = colnames(positive_count)[11:15], names_to = "X", values_to = "Z")
-long_df2$patient=factor(long_df2$patient,levels=unique(long_df2$patient))
-long_df2 |> ggplot(aes(patient, X, fill = Z)) + geom_tile() +scale_fill_viridis()
-```
 
 Risk Table
 ```{r}
@@ -181,8 +261,17 @@ Risk Table
 ### event: should be your censor information, by default 1 is event observed, 0 ins censor
 ### group: should be you sample groupings like mutation present vs. WT vs. deletion etc.
 library(rawr)
+binary=subset(merged_data2,group=="Group3")[,1:8]
+count=rep(0,nrow(binary))
+for (i in 2:ncol(binary)){
+  threshold=quantile(binary[,i],0.8)
+  binary[,i]=ifelse(binary[,i]>threshold,1,0)
+  count=count+binary[,i]
+}
+binary$count=count
+Gamer=merge(binary,Gamer_Survival,by="patient")
 Gamer$risk=ifelse(Gamer$count>5,1,ifelse(Gamer$count>2,2,ifelse(Gamer$count>0,3,4)))
-survData <- Gamer[,c(12,13,14)]
+survData <- subset(Gamer,group=="Group3")[,c(12,13,15)]
 colnames(survData) <- c("Time","Event","Class")
 survData$Time=survData$Time/30.42
 table(survData$Class)
@@ -199,7 +288,7 @@ paircomp_OS <- coxph_pairs(Surv(Time,Event)~ Class, data=survData)
 ### It takes survival curves and data table generated above
 ### If your data has a short follow up you may consider adjusting break.time.by = 6 to add a risk table entry for every 6 months instead of 12 months 
 ggsurv <- ggsurvplot(
-  title = "Overall Survival for Gamer dataset",
+  title = "Overall Survival for Gamer group3",
   surv.fit,                     # survfit object with calculated statistics.
   data = survData,             # data used to fit survival   curves.
   risk.table = TRUE,       # show risk table.
@@ -211,7 +300,9 @@ ggsurv <- ggsurvplot(
   palette = "jco",
   # survival estimates.
   xlab = "Time in months",   # customize X axis label. 
+  xlim = c(0,192),
   ylab = " OS probability",
+  # ylim=c(0.7,1),
   break.time.by = 12,     # break X axis in time intervals by 500.
   ggtheme = theme_light(), # customize plot and risk table with a theme.
   risk.table.y.text.col = T,# color risk table text annotations.
@@ -235,7 +326,7 @@ Risk Table for PFS
 ### group: should be you sample groupings like mutation present vs. WT vs. deletion etc.
 library(rawr)
 Gamer$risk=ifelse(Gamer$count>5,1,ifelse(Gamer$count>2,2,ifelse(Gamer$count>0,3,4)))
-survData <- Gamer[,c(10,11,14)]
+survData <- subset(Gamer,group=="Group3")[,c(10,11,15)]
 colnames(survData) <- c("Time","Event","Class")
 survData$Time=survData$Time/30.42
 table(survData$Class)
@@ -252,7 +343,7 @@ paircomp_OS <- coxph_pairs(Surv(Time,Event)~ Class, data=survData)
 ### It takes survival curves and data table generated above
 ### If your data has a short follow up you may consider adjusting break.time.by = 6 to add a risk table entry for every 6 months instead of 12 months 
 ggsurv <- ggsurvplot(
-  title = "Progression-Free Survival for Gamer dataset",
+  title = "Progression-Free Survival for Gamer group3",
   surv.fit,                     # survfit object with calculated statistics.
   data = survData,             # data used to fit survival   curves.
   risk.table = TRUE,       # show risk table.
@@ -264,6 +355,7 @@ ggsurv <- ggsurvplot(
   palette = "jco",
   # survival estimates.
   xlab = "Time in months",   # customize X axis label. 
+  xlim = c(0,100),
   ylab = " PFS probability",
   break.time.by = 12,     # break X axis in time intervals by 500.
   ggtheme = theme_light(), # customize plot and risk table with a theme.

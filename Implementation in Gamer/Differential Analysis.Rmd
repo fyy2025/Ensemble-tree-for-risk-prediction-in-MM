@@ -1,0 +1,101 @@
+---
+title: "Differential analysis"
+output: html_document
+date: "2025-01-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+load("/Users/fanyiyang/Desktop/Research/summer/Ensemble-tree-for-risk-prediction-in-MM/Implementation in Gamer/Gamer.Rdata")
+```
+
+
+```{r}
+library(readr)
+library(DESeq2)
+library(tibble)
+Gamer_raw=txi.salmon$counts
+high_risk1=read_csv("./Gamer1_gt5.csv")
+high_risk2=read_csv("./Gamer2_gt5.csv")
+high_risk3=read_csv("./Gamer3_gt5.csv")
+
+colnames(Gamer_raw)=sub("\\_.*", "", colnames(Gamer_raw))
+```
+
+```{r}
+Gamer_Survival=readRDS("./Gamer_Clinic_2023_surv.RDS")
+group1=subset(Gamer_Survival,group=="Group1")
+Gamer_raw1=as.data.frame(Gamer_raw)[,colnames(Gamer_raw) %in% rownames(group1)]
+group2=subset(Gamer_Survival,group=="Group2")
+Gamer_raw2=as.data.frame(Gamer_raw)[,colnames(Gamer_raw) %in% rownames(group2)]
+group3=subset(Gamer_Survival,group=="Group3")
+Gamer_raw3=as.data.frame(Gamer_raw)[,colnames(Gamer_raw) %in% rownames(group3)]
+
+high_risk=high_risk3
+counts=as.data.frame(Gamer_raw3)
+```
+
+
+```{r}
+
+igGenes <- unique(c(grep(pattern = "^IGH",x = rownames(counts),value = T),
+             grep(pattern = "^IGK",x = rownames(counts),value = T),
+             grep(pattern = "^IGL",x = rownames(counts),value = T)))
+
+filteredCounts <- counts[apply(counts,1,median) > 5,]
+filteredCounts <- filteredCounts[!(rownames(filteredCounts) %in% igGenes),]
+
+condition=ifelse(colnames(filteredCounts) %in% high_risk$x,"high","low")
+metadata <- data.frame(
+  row.names = colnames(filteredCounts),  # Sample names
+  condition = condition  # Experimental conditions
+)
+```
+
+```{r}
+dds <- DESeqDataSetFromMatrix(
+  countData = round(filteredCounts),    # Count matrix
+  colData = metadata,    # Metadata table
+  design = ~ condition   # Experimental design formula
+)
+```
+
+```{r}
+dds <- DESeq(dds)
+```
+
+```{r}
+results <- results(dds, contrast = c("condition", "high", "low"))
+```
+
+```{r}
+ggplot(as.data.frame(results), aes(x = log2FoldChange, y = -log10(pvalue))) +
+  geom_point() +
+  scale_color_manual(values = c("No" = "grey", "Yes" = "red")) +
+  labs(title = "Volcano Plot for Gamer group3", x = "Log2 Fold Change", y = "-Log10 P-Value") +
+  theme_minimal()
+```
+
+```{r}
+a=rownames(head(results[order(results$log2FoldChange,decreasing=F),],10))
+```
+```{r}
+a
+```
+```{r}
+up_Gamer3=subset(results,log2FoldChange>0.5 & padj<0.01)
+write.csv(up_Gamer3,"./up_Gamer3.csv")
+down_Gamer3=subset(results,log2FoldChange<(-0.5) & padj<0.01)
+write.csv(down_Gamer3,"./down_Gamer3.csv")
+```
+
+
+```{r}
+write.csv(results,"./differential_result3.csv")
+```
+
+
+
