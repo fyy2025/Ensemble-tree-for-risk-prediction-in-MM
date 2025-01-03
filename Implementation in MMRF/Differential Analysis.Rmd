@@ -1,0 +1,102 @@
+---
+title: "Differential analysis"
+output: html_document
+date: "2025-01-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readr)
+library(DESeq2)
+library(tibble)
+MMRF_raw=read_tsv("./MMRF_raw.tsv")
+high_risk=read_csv("./MMRF_gt5.csv")
+patient=read_csv("./Gene\ signature\ scores/EI_OS_score.csv")$patient
+MMRF_raw <- MMRF_raw %>% dplyr::select("Gene",ends_with("_1_BM_CD138pos"))
+genes = MMRF_raw$Gene
+MMRF_raw=MMRF_raw[,-1]
+colnames(MMRF_raw)=gsub(pattern = "_1_BM_CD138pos",replacement = "",x = colnames(MMRF_raw))
+MMRF_raw=MMRF_raw[,colnames(MMRF_raw)%in%patient]
+```
+```{r}
+library(biomaRt) 
+mart <- useMart('ENSEMBL_MART_ENSEMBL')
+mart <- useDataset('hsapiens_gene_ensembl', mart)
+
+annotLookup <- getBM(
+  mart = mart,
+  attributes = c(
+    'hgnc_symbol',
+    'ensembl_gene_id',
+    'gene_biotype'),
+  uniqueRows = TRUE)
+```
+
+```{r}
+counts=as.data.frame(MMRF_raw)
+
+rownames(counts)=genes
+
+igGenes <- unique(c(grep(pattern = "^IGH",x = annotLookup$hgnc_symbol,value = T),
+             grep(pattern = "^IGK",x = annotLookup$hgnc_symbol,value = T),
+             grep(pattern = "^IGL",x = annotLookup$hgnc_symbol,value = T)))
+
+filteredCounts <- counts[apply(counts,1,median) > 5,]
+filteredCounts <- filteredCounts[!(rownames(filteredCounts) %in% subset(annotLookup,hgnc_symbol %in% igGenes)$ensembl_gene_id),]
+filteredCounts <- filteredCounts[rowSums(filteredCounts>0)>4,]
+
+condition=ifelse(colnames(filteredCounts) %in% high_risk$x,"high","low")
+metadata <- data.frame(
+  row.names = colnames(filteredCounts),  # Sample names
+  condition = condition  # Experimental conditions
+)
+```
+
+```{r}
+dds <- DESeqDataSetFromMatrix(
+  countData = round(filteredCounts),    # Count matrix
+  colData = metadata,    # Metadata table
+  design = ~ condition   # Experimental design formula
+)
+```
+
+```{r}
+dds <- DESeq(dds)
+```
+
+```{r}
+results <- results(dds, contrast = c("condition", "high", "low"))
+results$Significant <- ifelse(results$padj < 0.05 & abs(results$log2FoldChange) > 5, "Yes", "No")
+```
+
+```{r}
+ggplot(as.data.frame(results), aes(x = log2FoldChange, y = -log10(pvalue))) +
+  geom_point() +
+  scale_color_manual(values = c("No" = "grey", "Yes" = "red")) +
+  labs(title = "Volcano Plot for MMRF", x = "Log2 Fold Change", y = "-Log10 P-Value") +
+  theme_minimal()
+```
+
+```{r}
+a=rownames(head(results[order(results$padj,decreasing=F),],10))
+```
+```{r}
+subset(annotLookup,ensembl_gene_id %in% a)$hgnc_symbol
+```
+
+```{r}
+up_MMRF=subset(results,log2FoldChange>0.5 & padj<0.01)
+write.csv(up_MMRF,"./up_MMRF.csv")
+down_MMRF=subset(results,log2FoldChange<(-0.5) & padj<0.01)
+write.csv(down_MMRF,"./down_MMRF.csv")
+```
+
+```{r}
+write.csv(results,"./differential_result.csv")
+```
+
+
+
