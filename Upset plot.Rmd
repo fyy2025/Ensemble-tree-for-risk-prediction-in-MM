@@ -1,0 +1,124 @@
+---
+title: "Upset plot"
+output: html_document
+date: "2025-01-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readr)
+up_MMRF=read_csv("./Implementation\ in\ MMRF/up_MMRF.csv")
+up_MMRF=up_MMRF$...1
+
+up_Gamer1=read_csv("./Implementation\ in\ Gamer/up_Gamer1.csv")$...1
+up_Gamer2=read_csv("./Implementation\ in\ Gamer/up_Gamer2.csv")$...1
+up_Gamer3=read_csv("./Implementation\ in\ Gamer/up_Gamer3.csv")$...1
+```
+
+```{r}
+library(biomaRt) 
+mart <- useMart('ENSEMBL_MART_ENSEMBL')
+mart <- useDataset('hsapiens_gene_ensembl', mart)
+
+annotLookup <- getBM(
+  mart = mart,
+  attributes = c(
+    'hgnc_symbol',
+    'ensembl_gene_id',
+    'gene_biotype'),
+  uniqueRows = TRUE)
+```
+
+```{r}
+up_MMRF_sub = subset(annotLookup,ensembl_gene_id %in% up_MMRF)$hgnc_symbol
+```
+
+```{r}
+all_genes <- unique(c(up_MMRF_sub, up_Gamer1, up_Gamer2, up_Gamer3))
+
+# Create a binary membership matrix
+membership_matrix <- data.frame(
+  MMRF = as.integer(all_genes %in% up_MMRF_sub),
+  Gamer1 = as.integer(all_genes %in% up_Gamer1),
+  Gamer2 = as.integer(all_genes %in% up_Gamer2),
+  Gamer3 = as.integer(all_genes %in% up_Gamer3)
+)
+
+rownames(membership_matrix)=all_genes
+
+```
+
+```{r}
+library(UpSetR)
+library(grid)
+upset(
+  membership_matrix,
+  sets = c("MMRF", "Gamer1", "Gamer2", "Gamer3"),
+  order.by = "freq"
+  )
+grid.text("UpSet Plot for upregulated genes in blue group",x = 0.65, y=0.95, gp=gpar(fontsize=15))
+```
+```{r}
+intersect(intersect(intersect(up_MMRF_sub,up_Gamer1),up_Gamer2),up_Gamer3)
+```
+
+```{r}
+library(readr)
+down_MMRF=read_csv("./Implementation\ in\ MMRF/down_MMRF.csv")
+down_MMRF=down_MMRF$...1
+
+down_Gamer1=read_csv("./Implementation\ in\ Gamer/down_Gamer1.csv")$...1
+down_Gamer2=read_csv("./Implementation\ in\ Gamer/down_Gamer2.csv")$...1
+down_Gamer3=read_csv("./Implementation\ in\ Gamer/down_Gamer3.csv")$...1
+```
+
+```{r}
+library(biomaRt) 
+mart <- useMart('ENSEMBL_MART_ENSEMBL')
+mart <- useDataset('hsapiens_gene_ensembl', mart)
+
+annotLookup <- getBM(
+  mart = mart,
+  attributes = c(
+    'hgnc_symbol',
+    'ensembl_gene_id',
+    'gene_biotype'),
+  uniqueRows = TRUE)
+```
+
+```{r}
+down_MMRF_sub = subset(annotLookup,ensembl_gene_id %in% down_MMRF)$hgnc_symbol
+```
+
+```{r}
+all_genes <- unique(c(down_MMRF_sub, down_Gamer1, down_Gamer2, down_Gamer3))
+
+# Create a binary membership matrix
+membership_matrix <- data.frame(
+  MMRF = as.integer(all_genes %in% down_MMRF_sub),
+  Gamer1 = as.integer(all_genes %in% down_Gamer1),
+  Gamer2 = as.integer(all_genes %in% down_Gamer2),
+  Gamer3 = as.integer(all_genes %in% down_Gamer3)
+)
+
+rownames(membership_matrix)=all_genes
+
+```
+
+```{r}
+library(UpSetR)
+library(grid)
+upset(
+  membership_matrix,
+  sets = c("MMRF", "Gamer1", "Gamer2", "Gamer3"),
+  order.by = "freq"
+  )
+grid.text("UpSet Plot for downregulated genes in blue group",x = 0.65, y=0.95, gp=gpar(fontsize=15))
+```
+```{r}
+intersect(intersect(intersect(down_MMRF_sub,down_Gamer1),down_Gamer2),down_Gamer3)
+```
+
