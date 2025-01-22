@@ -28,7 +28,8 @@ annotLookup <- getBM(
   attributes = c(
     'hgnc_symbol',
     'ensembl_gene_id',
-    'gene_biotype'),
+    'gene_biotype',
+    'entrezgene_id'),
   uniqueRows = TRUE)
 ```
 
@@ -64,6 +65,11 @@ grid.text("UpSet Plot for upregulated genes in blue group",x = 0.65, y=0.95, gp=
 ```{r}
 intersect(intersect(intersect(up_MMRF_sub,up_Gamer1),up_Gamer2),up_Gamer3)
 ```
+
+```{r}
+write.csv(membership_matrix,"./Binary upregulated gene list.csv",row.names = T,col.names = T)
+```
+
 
 ```{r}
 library(readr)
@@ -120,5 +126,172 @@ grid.text("UpSet Plot for downregulated genes in blue group",x = 0.65, y=0.95, g
 ```
 ```{r}
 intersect(intersect(intersect(down_MMRF_sub,down_Gamer1),down_Gamer2),down_Gamer3)
+```
+```{r}
+write.csv(membership_matrix,"./Binary downregulated gene list.csv",row.names = T,col.names = T)
+```
+
+```{r}
+# BiocManager::install("clusterProfiler")
+# BiocManager::install("org.Hs.eg.db")
+# BiocManager::install("AnnotationDbi")
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(AnnotationDbi)
+```
+```{r}
+geneList=intersect(intersect(up_MMRF_sub,up_Gamer1),up_Gamer3)
+geneList=geneList[!(geneList %in% up_Gamer2)]
+GO_results <- enrichGO(gene=geneList, OrgDb="org.Hs.eg.db", key="SYMBOL", ont="BP")
+```
+
+```{r}
+# BiocManager::install("GOSemSim")
+library(GOSemSim)
+```
+
+
+```{r}
+library(dplyr)
+ego <- GO_results
+# Step 2: Extract GO terms and perform semantic similarity analysis
+go_terms <- ego@result$ID # Extract significant GO term IDs
+go_similarity <- mgoSim(go_terms, go_terms, 
+                        semData = godata('org.Hs.eg.db', ont = "BP"), 
+                        measure = "Wang", combine = NULL)
+
+# Step 3: Cluster GO terms based on similarity
+# Use hierarchical clustering
+hc <- hclust(as.dist(1 - go_similarity), method = "complete")
+
+# Define a similarity cutoff to cut the tree and identify distinct clusters
+similarity_cutoff <- 0.2
+clusters <- cutree(hc, h = 1 - similarity_cutoff)
+
+# Add cluster information to the enrichment results
+ego@result$Cluster <- clusters[match(ego@result$ID, names(clusters))]
+
+# Step 4: Select representative GO terms for each cluster
+# Pick the term with the lowest p-value in each cluster
+representative_terms <- ego@result %>%
+  group_by(Cluster) %>%
+  slice_min(order_by = p.adjust) %>%
+  ungroup()
+
+# Step 5: Output the filtered pathways
+print(representative_terms)
+```
+```{r}
+representative_terms <- representative_terms[order(representative_terms$qvalue,decreasing = F),]
+head(representative_terms,10)
+```
+
+```{r}
+mgoSim("GO:0030174", "GO:0006261", 
+                        semData = godata('org.Hs.eg.db', ont = "BP"), 
+                        measure = "Wang", combine = NULL)
+```
+```{r}
+# BiocManager::install("GOxploreR")
+library(GOxploreR)
+human_bp_dag <- GetDAG(organism = "Human", domain = "BP")
+term1 <- "GO:0007059"
+term2 <- "GO:0098813"
+
+# Filter the DAG to find relationships involving these terms
+relationship <- human_bp_dag[
+  (human_bp_dag[, 1] == term1 & human_bp_dag[, 2] == term2) |
+  (human_bp_dag[, 1] == term2 & human_bp_dag[, 2] == term1), ]
+
+# Display the relationship
+print(relationship)
+```
+```{r}
+library(igraph)
+
+# Create a graph from the edge list
+dag_graph <- graph_from_data_frame(human_bp_dag, directed = TRUE)
+
+term1="GO:0030174"
+term2="GO:0006261"
+# Get neighbors for the valid terms
+valid_terms <- c(term1, term2)
+
+# Extract neighbors (check mode = "all" for undirected, or "out"/"in" for directed graphs)
+neighbor_ids <- unique(c(valid_terms, unlist(lapply(valid_terms, function(term) {
+  neighbors(dag_graph, v = term, mode = "all")$name
+}))))
+
+subgraph <- induced_subgraph(dag_graph, vids = neighbor_ids)
+
+plot(
+  subgraph,
+  vertex.label = V(subgraph)$name,
+  vertex.color = "lightblue",
+  edge.arrow.size = 0.5,
+  main = "GO Term Relationships"
+)
+```
+
+
+
+
+```{r}
+annotLookup <- getBM(
+  mart = mart,
+  attributes = c(
+    'hgnc_symbol',
+    'entrezgene_id'),
+  uniqueRows = TRUE)
+gene_entrez <- rep(0,length(geneList))
+for (i in 1:length(geneList)){
+  gene_entrez[i]=annotLookup$entrezgene_id[min(which(annotLookup$hgnc_symbol==geneList[i]))]
+}
+KEGG_results <- enrichKEGG(gene_entrez, organism = "hsa", keyType = "kegg")
+```
+```{r}
+KEGG_results <- KEGG_results[order(KEGG_results$qvalue,decreasing = F),]
+```
+
+```{r}
+head(KEGG_results[,c(4,12,14)],10)
+```
+
+
+```{r}
+s_result<-clusterProfiler::simplify(GO_results)
+as.data.frame(s_result)
+```
+
+```{r}
+GO_results <- GO_results[order(GO_results$qvalue,decreasing = F),]
+```
+
+```{r}
+head(GO_results[,c(2,10,12)],10)
+```
+```{r}
+library(geneClassifiers)
+EMC92Classifier <- getClassifier("EMC92")
+EMC92Classifier
+EMCweights <- getWeights(EMC92Classifier)
+EMC_probeset_id <- names(weights)
+```
+
+```{r}
+library(biomaRt) 
+ensembl = useEnsembl("ensembl",dataset="hsapiens_gene_ensembl",mirror="www") 
+affy_ensembl= c("affy_hg_u133_plus_2", "hgnc_symbol","ensembl_gene_id")
+dict=getBM(attributes=affy_ensembl, filters="affy_hg_u133_plus_2",values = EMC_probeset_id, mart = ensembl)
+```
+
+
+```{r}
+EMC_gene_list = rep(0,length(EMC_probeset_id))
+for (i in 1:length(EMC_probeset_id)){
+  EMC_gene_list[i] = dict$hgnc_symbol[min(which(dict$affy_hg_u133_plus_2==EMC_probeset_id[i]))]
+}
+EMC_up=EMC_gene_list[EMCweights<0]
+sum(EMC_up %in% geneList)
 ```
 

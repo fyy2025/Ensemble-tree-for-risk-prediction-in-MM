@@ -91,12 +91,19 @@ binary$count=count
 library(viridis)
 positive_count=subset(binary,count>0)
 positive_count=positive_count[order(positive_count$count, decreasing = TRUE), ]
-barplot(positive_count$count)
+positive_count$patient <- factor(positive_count$patient, levels = positive_count$patient)
+ggplot(positive_count,aes(x=patient,y=count))+
+  geom_bar(stat="identity",width=0.6)+
+  labs(title = "Bar Plot ordered by the count of signatures indicating high risk in IFM", x = "Patient", y = "Count") +
+  theme(axis.text.x=element_blank())
 
 long_df <- positive_count[,-10] |> pivot_longer(cols = colnames(positive_count)[-c(1,10)], names_to = "X", values_to = "Z")
 long_df$patient=factor(long_df$patient,levels=unique(long_df$patient))
-library(ggplot2)
-long_df |> ggplot(aes(patient, X, fill = Z)) + geom_tile()+scale_fill_viridis()
+long_df |> ggplot(aes(patient, X, fill = factor(Z))) +
+  geom_tile(width = 1, height = 1) +
+  labs(fill = "High Risk",y="Signature",x="Patient") +
+  theme(axis.text.x=element_blank()) +
+  scale_fill_viridis_d()
 ```
 
 
@@ -170,6 +177,7 @@ paircomp_OS <- coxph_pairs(Surv(Time,Event)~ Class, data=survData)
 ### It takes survival curves and data table generated above
 ### If your data has a short follow up you may consider adjusting break.time.by = 6 to add a risk table entry for every 6 months instead of 12 months 
 ggsurv <- ggsurvplot(
+  title = "Overall Survival for IFM dataset",
   surv.fit,                     # survfit object with calculated statistics.
   data = survData,             # data used to fit survival   curves.
   risk.table = TRUE,       # show risk table.
@@ -223,6 +231,7 @@ paircomp_OS <- coxph_pairs(Surv(Time,Event)~ Class, data=survData)
 ### It takes survival curves and data table generated above
 ### If your data has a short follow up you may consider adjusting break.time.by = 6 to add a risk table entry for every 6 months instead of 12 months 
 ggsurv <- ggsurvplot(
+  title = "Progression-Free Survival for IFM dataset",
   surv.fit,                     # survfit object with calculated statistics.
   data = survData,             # data used to fit survival   curves.
   risk.table = TRUE,       # show risk table.

@@ -36,9 +36,11 @@ library(randomForestSRC)
 library(ranger)
 library(alabama)
 library(dplyr)
+library(tidyr)
 ```
 
 ```{r}
+setwd("./Gene\ signature\ scores")
 EMC_score=read.csv("./EMC_score_UAMS.csv")
 EI_score=read.csv("./EI_OS_score_UAMS.csv")
 UAMS_score=read.csv("./UAMS70_score_UAMS.csv")
@@ -70,6 +72,7 @@ merged_data_UAMS=merged_data[,-1]
 ```
 
 ```{r}
+setwd("./Gene\ signature\ scores")
 UAMS17_score=read.csv("./UAMS17_score_UAMS.csv")
 UAMS80_score=read.csv("./UAMS80_score_UAMS.csv")
 HM19_score=read.csv("./HM19_score_UAMS.csv")
@@ -88,12 +91,150 @@ merged2=merge(merged,UAMS17_score,by="patient")%>%
 ```
 
 ```{r}
+binary=merged2
+count=rep(0,nrow(binary))
+for (i in 2:ncol(binary)){
+  threshold=quantile(binary[,i],0.8)
+  binary[,i]=ifelse(binary[,i]>threshold,1,0)
+  count=count+binary[,i]
+}
+binary$count=count
+```
+```{r}
+library(viridis)
+positive_count=subset(binary,count>0)
+positive_count=positive_count[order(positive_count$count, decreasing = TRUE), ]
+positive_count$patient <- factor(positive_count$patient, levels = positive_count$patient)
+ggplot(positive_count,aes(x=patient,y=count))+
+  geom_bar(stat="identity",width=0.6)+
+  labs(title = "Bar Plot ordered by the count of signatures indicating high risk in UAMS", x = "Patient", y = "Count") +
+  theme(axis.text.x=element_blank())
+
+long_df <- positive_count[,-10] |> pivot_longer(cols = colnames(positive_count)[-c(1,10)], names_to = "X", values_to = "Z")
+long_df$patient=factor(long_df$patient,levels=unique(long_df$patient))
+long_df |> ggplot(aes(patient, X, fill = factor(Z))) +
+  geom_tile(width = 1, height = 1) +
+  labs(fill = "High Risk",y="Signature",x="Patient") +
+  theme(axis.text.x=element_blank()) +
+  scale_fill_viridis_d()
+```
+```{r}
+UAMS=merge(binary,UAMS_Survival,by="patient")
+```
+
+Risk Table
+```{r}
+### This is a data frame with 3 columns,
+### time: should be PFS or OS time depending your KM plot. Please convert your time to months if it is coded as days or years
+### event: should be your censor information, by default 1 is event observed, 0 ins censor
+### group: should be you sample groupings like mutation present vs. WT vs. deletion etc.
+library(rawr)
+UAMS$risk=ifelse(UAMS$count>5,1,ifelse(UAMS$count>2,2,ifelse(UAMS$count>0,3,4)))
+survData <- UAMS[,c(11,12,15)]
+colnames(survData) <- c("Time","Event","Class")
+table(survData$Class)
+
+survData <- na.omit(survData)
+
+### This function will create survival curves and create survfit object required for plotting below.
+### It simply use the data frame generated above
+surv.fit <- survfit (Surv(Time,Event)~ Class, data=survData)
+paircomp_OS <- coxph_pairs(Surv(Time,Event)~ Class, data=survData)
+
+### ggsurvplot funtion creates KM plot and risk table in JCO format. 
+### Please do not change the palette option
+### It takes survival curves and data table generated above
+### If your data has a short follow up you may consider adjusting break.time.by = 6 to add a risk table entry for every 6 months instead of 12 months 
+ggsurv <- ggsurvplot(
+  title = "Overall Survival for UAMS dataset",
+  surv.fit,                     # survfit object with calculated statistics.
+  data = survData,             # data used to fit survival   curves.
+  risk.table = TRUE,       # show risk table.
+  tables.theme = clean_theme(),
+  pval = TRUE,             # show p-value of log-rank test.
+  pval.coord = c(-0.75,0.20),
+  #  conf.int = TRUE,         # show confidence intervals for 
+  # point estimates of survival curves.
+  palette = "jco",
+  # survival estimates.
+  xlab = "Time in months",   # customize X axis label. 
+  xlim = c(0,108),
+  ylab = " OS probability",
+  break.time.by = 12,     # break X axis in time intervals by 500.
+  ggtheme = theme_light(), # customize plot and risk table with a theme.
+  risk.table.y.text.col = T,# color risk table text annotations.
+  risk.table.height = 0.25, # the height of the risk table
+  risk.table.y.text = FALSE,# show bars instead of names in text annotations
+  # in legend of risk table.
+  conf.int.style = "step",  # customize style of confidence intervals
+  surv.median.line = "hv",  # add the median survival pointer.
+  legend.labs = c(">5 signatures","3-5 signatures","1-2 signatures","0 signatures"),    # change legend labels, please double check your edited labels here and your input data!!
+  #palette = c("#CD534CFF","#0073C2FF","#EFC000FF","#6a994e")
+)
+
+### Double check your KM plot
+print(ggsurv)
+```
+Risk Table for PFS
+```{r}
+### This is a data frame with 3 columns,
+### time: should be PFS or OS time depending your KM plot. Please convert your time to months if it is coded as days or years
+### event: should be your censor information, by default 1 is event observed, 0 ins censor
+### group: should be you sample groupings like mutation present vs. WT vs. deletion etc.
+library(rawr)
+UAMS$risk=ifelse(UAMS$count>5,1,ifelse(UAMS$count>2,2,ifelse(UAMS$count>0,3,4)))
+survData <- UAMS[,c(13,14,15)]
+colnames(survData) <- c("Time","Event","Class")
+table(survData$Class)
+
+survData <- na.omit(survData)
+
+### This function will create survival curves and create survfit object required for plotting below.
+### It simply use the data frame generated above
+surv.fit <- survfit (Surv(Time,Event)~ Class, data=survData)
+paircomp_OS <- coxph_pairs(Surv(Time,Event)~ Class, data=survData)
+
+### ggsurvplot funtion creates KM plot and risk table in JCO format. 
+### Please do not change the palette option
+### It takes survival curves and data table generated above
+### If your data has a short follow up you may consider adjusting break.time.by = 6 to add a risk table entry for every 6 months instead of 12 months 
+ggsurv <- ggsurvplot(
+  title = "Progression-Free Survival for UAMS dataset",
+  surv.fit,                     # survfit object with calculated statistics.
+  data = survData,             # data used to fit survival   curves.
+  risk.table = TRUE,       # show risk table.
+  tables.theme = clean_theme(),
+  pval = TRUE,             # show p-value of log-rank test.
+  pval.coord = c(-0.75,0.20),
+  #  conf.int = TRUE,         # show confidence intervals for 
+  # point estimates of survival curves.
+  palette = "jco",
+  # survival estimates.
+  xlab = "Time in months",   # customize X axis label. 
+  ylab = " PFS probability",
+  break.time.by = 12,     # break X axis in time intervals by 500.
+  ggtheme = theme_light(), # customize plot and risk table with a theme.
+  risk.table.y.text.col = T,# color risk table text annotations.
+  risk.table.height = 0.25, # the height of the risk table
+  risk.table.y.text = FALSE,# show bars instead of names in text annotations
+  # in legend of risk table.
+  conf.int.style = "step",  # customize style of confidence intervals
+  surv.median.line = "hv",  # add the median survival pointer.
+  legend.labs = c(">5 signatures","3-5 signatures","1-2 signatures","0 signatures"),    # change legend labels, please double check your edited labels here and your input data!!
+  #palette = c("#CD534CFF","#0073C2FF","#EFC000FF","#6a994e")
+)
+
+### Double check your KM plot
+print(ggsurv)
+```
+
+```{r}
 merged_data2=merge(merged2,UAMS_Survival,by="patient")
 patient_ID=merged_data2$patient
 merged_data_UAMS2=merged_data2[,-1]
-merged_data_UAMS2$OS=merged_data_UAMS2$OS*30
-merged_data_UAMS2$EFS=merged_data_UAMS2$EFS*30
-write_csv(merged_data_UAMS2,"./UAMS_8_continuous.csv")
+merged_data_UAMS2$OS=merged_data_UAMS2$OS*30.42
+merged_data_UAMS2$EFS=merged_data_UAMS2$EFS*30.42
+# write_csv(merged_data_UAMS2,"./UAMS_8_continuous.csv")
 ```
 
 ```{r}
@@ -101,20 +242,4 @@ hist(subset(merged_data_UAMS2,OS<4000)$OS)
 ```
 
 
-```{r}
-del17p=read_csv("./DNA\ markers/cohort_export_baseline_del17p.csv")
-delCDKN2C=read_csv("./DNA\ markers/cohort_export_baseline_delCDKN2C.csv")
-gain1q21=read_csv("./DNA\ markers/cohort_export_baseline_gain1q21.csv")
-delt414=read_csv("./DNA\ markers/cohort_export_baseline_t414.csv")
-delt1416=read_csv("./DNA\ markers/cohort_export_baseline_t1416.csv")
-```
-
-
-```{r}
-cor(merged_data_UAMS2[,1:8])
-```
-```{r}
-UAMS=merged_data2
-hist(UAMS$TTRelpase)
-```
 
