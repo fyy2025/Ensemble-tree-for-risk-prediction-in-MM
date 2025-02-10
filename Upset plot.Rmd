@@ -158,8 +158,9 @@ ego <- GO_results
 go_terms <- ego@result$ID # Extract significant GO term IDs
 go_similarity <- mgoSim(go_terms, go_terms, 
                         semData = godata('org.Hs.eg.db', ont = "BP"), 
-                        measure = "Wang", combine = NULL)
+                        measure = "Resnik", combine = NULL)
 
+go_similarity[is.na(go_similarity)] <- 0
 # Step 3: Cluster GO terms based on similarity
 # Use hierarchical clustering
 hc <- hclust(as.dist(1 - go_similarity), method = "complete")
@@ -196,7 +197,7 @@ mgoSim("GO:0030174", "GO:0006261",
 library(GOxploreR)
 human_bp_dag <- GetDAG(organism = "Human", domain = "BP")
 term1 <- "GO:0007059"
-term2 <- "GO:0098813"
+term2 <- "GO:0000819"
 
 # Filter the DAG to find relationships involving these terms
 relationship <- human_bp_dag[
@@ -212,8 +213,8 @@ library(igraph)
 # Create a graph from the edge list
 dag_graph <- graph_from_data_frame(human_bp_dag, directed = TRUE)
 
-term1="GO:0030174"
-term2="GO:0006261"
+# term1="GO:0030174"
+# term2="GO:0006261"
 # Get neighbors for the valid terms
 valid_terms <- c(term1, term2)
 

@@ -170,7 +170,8 @@ ICI=function(test,predicted_prob,tau,plot=FALSE){
   predict.calibrate.cox2[is.nan(predict.calibrate.cox2 )]=0
 
   ici=mean(abs(predicted_prob - predict.calibrate.cox2))
-  return(ici)
+  calibration_variance=var(predicted_prob - predict.calibrate.cox2)
+  return(list(ici,calibration_variance))
 }
 ```
 
@@ -210,7 +211,7 @@ stepwise_cox <- function(formula, data, direction = "both", datasets = list(MMRF
     for (i in 1:length(datasets)){
       dataset <- datasets[[i]]
       surv_probs <- survest(model, newdata = dataset, times = tau)$surv
-      weighted_ICI = weighted_ICI + ICI(dataset,1 - surv_probs,tau)*sum(subset(dataset,time>tau)$status)/total_event
+      weighted_ICI = weighted_ICI + ICI(dataset,1 - surv_probs,tau)[[1]]*sum(subset(dataset,time>tau)$status)/total_event
     }
     return (weighted_ICI)
   }
@@ -254,6 +255,58 @@ stepwise_cox <- function(formula, data, direction = "both", datasets = list(MMRF
 }
 ```
 
+```{r}
+stepwise_cox2 <- function(formula, data, direction = "both", datasets = list(MMRF, IFM, UAMS, Gamer), tau, min_predictors = 1) {
+  custom_loss <- function(model){
+    weighted_ICI <- 0 
+    for (i in 1:length(datasets)){
+      dataset <- datasets[[i]]
+      surv_probs <- survest(model, newdata = dataset, times = tau)$surv
+      weighted_ICI = weighted_ICI + ICI(dataset,1 - surv_probs,tau)[[1]]/ICI(dataset,1 - surv_probs,tau)[[2]]
+    }
+    return (weighted_ICI)
+  }
+  current_model <- cph(formula, data = data,x=T,y=T,surv=T)
+  current_loss <- custom_loss(current_model)
+  variables <- all.vars(update(formula, . ~ . - 1))
+
+  step <- function(current_model, current_loss, variables, direction) {
+    best_model <- current_model
+    best_loss <- current_loss
+    if (length(coef(current_model)) > 1){
+      for (var in variables) {
+        new_formula <- if (direction == "both" || direction == "backward") {
+          update(formula(current_model), paste(". ~ . -", var))
+        } else {
+          update(formula(current_model), paste(". ~ . +", var))
+        }
+  
+        new_model <- cph(new_formula, data = data,x=T,y=T,surv=T)
+        new_loss <- custom_loss(new_model)
+        # print(new_model)
+  
+        if (new_loss < best_loss) {
+          best_model <- new_model
+          best_loss <- new_loss
+        }
+      }
+    }
+
+    list(model = best_model, loss = best_loss)
+  }
+
+  while (TRUE) {
+    step_result <- step(current_model, current_loss, variables, direction)
+    if (step_result$loss >= current_loss) break
+
+    current_model <- step_result$model
+    current_loss <- step_result$loss
+  }
+
+  return(current_model)
+}
+```
+
 MMRF
 ```{r}
 dd <- datadist(MMRF)
@@ -261,14 +314,14 @@ options(datadist="dd")
 MMRF_coef <- matrix(NA, nrow=7, ncol=10)
 MMRF_coef[,1] <- colnames(MMRF)[1:7]
 for (tau in seq(1,5,0.5)){
-  final_model = stepwise_cox(as.formula(Surv(time, status) ~ EMC+UAMS70+GPI+UAMS17+UAMS80+IFM15+HM19), data=MMRF, tau=tau*365)
+  final_model = stepwise_cox2(as.formula(Surv(time, status) ~ EMC+UAMS70+GPI+UAMS17+UAMS80+IFM15+HM19), data=MMRF, tau=tau*365)
   MMRF_coef[,tau/0.5] <- ifelse(colnames(MMRF)[1:7] %in% names(final_model$coefficients),1,0)
   print(MMRF_coef)
 }
 
 MMRF_coef <- as.data.frame(MMRF_coef)
 colnames(MMRF_coef)=c("Signature","1y","1.5y","2y","2.5y","3y","3.5y","4y","4.5y","5y")
-write.csv(MMRF_coef,"MMRF_coefficients2.csv")
+# write.csv(MMRF_coef,"MMRF_coefficients2.csv")
 ```
 
 IFM
@@ -278,14 +331,14 @@ options(datadist="dd")
 IFM_coef <- matrix(NA, nrow=7, ncol=10)
 IFM_coef[,1] <- colnames(IFM)[1:7]
 for (tau in seq(1,5,0.5)){
-  final_model = stepwise_cox(as.formula(Surv(time, status) ~ EMC+UAMS70+GPI+UAMS17+UAMS80+IFM15+HM19), data=IFM, tau=tau*365)
+  final_model = stepwise_cox2(as.formula(Surv(time, status) ~ EMC+UAMS70+GPI+UAMS17+UAMS80+IFM15+HM19), data=IFM, tau=tau*365)
   IFM_coef[,tau/0.5] <- ifelse(colnames(IFM)[1:7] %in% names(final_model$coefficients),1,0)
   print(IFM_coef)
 }
 
 IFM_coef <- as.data.frame(IFM_coef)
 colnames(IFM_coef)=c("Signature","1y","1.5y","2y","2.5y","3y","3.5y","4y","4.5y","5y")
-write.csv(IFM_coef,"IFM_coefficients2.csv")
+# write.csv(IFM_coef,"IFM_coefficients2.csv")
 ```
 
 UAMS
@@ -295,14 +348,14 @@ options(datadist="dd")
 UAMS_coef <- matrix(NA, nrow=7, ncol=10)
 UAMS_coef[,1] <- colnames(UAMS)[1:7]
 for (tau in seq(1,5,0.5)){
-  final_model = stepwise_cox(as.formula(Surv(time, status) ~ EMC+UAMS70+GPI+UAMS17+UAMS80+IFM15+HM19), data=UAMS, tau=tau*365)
+  final_model = stepwise_cox2(as.formula(Surv(time, status) ~ EMC+UAMS70+GPI+UAMS17+UAMS80+IFM15+HM19), data=UAMS, tau=tau*365)
   UAMS_coef[,tau/0.5] <- ifelse(colnames(UAMS)[1:7] %in% names(final_model$coefficients),1,0)
   print(UAMS_coef)
 }
 
 UAMS_coef <- as.data.frame(UAMS_coef)
 colnames(UAMS_coef)=c("Signature","1y","1.5y","2y","2.5y","3y","3.5y","4y","4.5y","5y")
-write.csv(UAMS_coef,"UAMS_coefficients2.csv")
+# write.csv(UAMS_coef,"UAMS_coefficients2.csv")
 ```
 
 Gamer
@@ -312,14 +365,14 @@ options(datadist="dd")
 Gamer_coef <- matrix(NA, nrow=7, ncol=10)
 Gamer_coef[,1] <- colnames(Gamer)[1:7]
 for (tau in seq(1,5,0.5)){
-  final_model = stepwise_cox(as.formula(Surv(time, status) ~ EMC+UAMS70+GPI+UAMS17+UAMS80+IFM15+HM19), data=Gamer, tau=tau*365)
+  final_model = stepwise_cox2(as.formula(Surv(time, status) ~ EMC+UAMS70+GPI+UAMS17+UAMS80+IFM15+HM19), data=Gamer, tau=tau*365)
   Gamer_coef[,tau/0.5] <- ifelse(colnames(Gamer)[1:7] %in% names(final_model$coefficients),1,0)
   print(Gamer_coef)
 }
 
 Gamer_coef <- as.data.frame(Gamer_coef)
 colnames(Gamer_coef)=c("Signature","1y","1.5y","2y","2.5y","3y","3.5y","4y","4.5y","5y")
-write.csv(Gamer_coef,"Gamer_coefficients2.csv")
+write.csv(Gamer_coef,"Gamer_coefficients3.csv")
 ```
 
 ```{r}
