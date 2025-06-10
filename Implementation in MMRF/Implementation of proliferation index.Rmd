@@ -45,9 +45,9 @@ library(janitor)
 MMRF_TPM=read_tsv("./MMRF_TPM.tsv")
 TPM_first_visit <- MMRF_TPM %>% dplyr::select("Gene",ends_with("_1_BM_CD138pos"))
 TPM_first_GPI = subset(TPM_first_visit,Gene %in% dict$ensembl_gene_id)
-for (i in 1:5){
-  TPM_first_GPI$Gene[i]=dict$hgnc_symbol[which(dict$ensembl_gene_id==TPM_first_GPI$Gene[i])]
-}
+# for (i in 1:5){
+#   TPM_first_GPI$Gene[i]=dict$hgnc_symbol[which(dict$ensembl_gene_id==TPM_first_GPI$Gene[i])]
+# }
 tidydata=t(TPM_first_GPI)%>%
   row_to_names(row_number=1)
 patient=row.names(tidydata)
@@ -66,7 +66,7 @@ for (i in 1:ncol(scaled_data)){
 ```
 
 ```{r}
-cutoff=quantile(score,0.8)
+cutoff=quantile(score,0.92)
 high_risk=public_id[score>=cutoff]
 low_risk=public_id[score<cutoff]
 ```

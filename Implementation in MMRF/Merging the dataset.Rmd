@@ -23,6 +23,7 @@ library(randomForestSRC)
 library(ranger)
 library(alabama)
 library(dplyr)
+library(tidyr)
 ```
 
 ```{r}
@@ -64,6 +65,11 @@ merged2=merge(merged,UAMS17_score,by="patient")%>%
   merge(IFM15_score,by="patient")%>%
   rename(IFM15=score)
 ```
+
+```{r}
+write.csv(merged2, "./merged_scores.csv")
+```
+
 
 ```{r}
 binary=merged2
@@ -155,6 +161,44 @@ long_df2 |> ggplot(aes(patient, X, fill = factor(Z))) +
   scale_fill_viridis_d()
   
   # ggplot(aes(patient, X, fill = Z)) + geom_tile() +scale_fill_viridis()
+```
+```{r}
+positive_count2=subset(binary,count==0)
+positive_count2$patient=gsub(pattern = "_",replacement = "",x = positive_count2$patient)
+positive_count2$del17p=ifelse(positive_count2$patient %in% del17p$Patient,1,0)
+positive_count2$delCDKN2C=ifelse(positive_count2$patient %in% delCDKN2C$Patient,1,0)
+positive_count2$gain1q21=ifelse(positive_count2$patient %in% gain1q21$Patient,1,0)
+positive_count2$t414=ifelse(positive_count2$patient %in% delt414$Patient,1,0)
+positive_count2$t1416=ifelse(positive_count2$patient %in% delt1416$Patient,1,0)
+positive_count2$TP53=ifelse(positive_count2$patient %in% TP53$patient,1,0)
+```
+
+
+```{r}
+library(ComplexHeatmap)
+max_val <- max(
+  rowSums(t(positive_count[,11:16])) / ncol(t(positive_count[,11:16])),
+  rowSums(t(positive_count2[,11:16])) / ncol(t(positive_count2[,11:16]))
+)
+
+binary_col_fun = c("0" = "grey", "1" = "red")  
+
+ht_list <- Heatmap(t(positive_count[,11:16]), name = "mat", show_column_dend = FALSE, show_row_dend = FALSE, show_row_names = TRUE, row_names_gp = gpar(fontsize = 10), row_names_side = "left", show_column_names = FALSE, col = binary_col_fun, height = unit(20, "mm")) +
+    rowAnnotation(prop1 = anno_barplot(rowSums(t(positive_count[,11:16]))/ncol(t(positive_count[,11:16])), width = unit(4, "cm"), ylim = c(0, max_val))) +
+    rowAnnotation(prop2 = anno_barplot(rowSums(t(positive_count2[,11:16]))/ncol(t(positive_count2[,11:16])), width = unit(4, "cm"), ylim = c(0, max_val)))
+
+
+draw(ht_list, padding = unit(c(2, 2, 10, 2), "mm")) # add space for titles
+
+decorate_annotation("prop1", { 
+    grid.text("Some signatures", y = unit(1, "npc") + unit(2, "mm"), just = "bottom") 
+})
+decorate_annotation("prop2", { 
+    grid.text("No signatures", y = unit(1, "npc") + unit(2, "mm"), just = "bottom") 
+})
+decorate_heatmap_body("mat", {
+    grid.text("Heatmap for DNA markers", y = unit(1, "npc") + unit(2, "mm"), just = "bottom")
+})
 ```
 
 ```{r}
