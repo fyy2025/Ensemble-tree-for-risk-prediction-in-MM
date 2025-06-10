@@ -7,25 +7,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
-```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
 
 ```{r}
 library(intsurv)
@@ -65,13 +46,6 @@ UAMS_Survival=read_excel("./GSE24080_MM_UAMS565_ClinInfo_27Jun2008_LS_clean.xls"
 ```
 
 ```{r}
-merged_data=merge(merged,UAMS_Survival,by="patient")
-patient_ID=merged_data$patient
-merged_data_UAMS=merged_data[,-1]
-#write_csv(merged_data_UAMS,"./merged_UAMS_data_continuous_pfs.csv")
-```
-
-```{r}
 setwd("./Gene\ signature\ scores")
 UAMS17_score=read.csv("./UAMS17_score_UAMS.csv")
 UAMS80_score=read.csv("./UAMS80_score_UAMS.csv")
@@ -88,6 +62,13 @@ merged2=merge(merged,UAMS17_score,by="patient")%>%
   rename(HM19=score)%>%
   merge(IFM15_score,by="patient")%>%
   rename(IFM15=score)
+```
+
+```{r}
+merged_data=merge(merged2,UAMS_Survival,by="patient")
+patient_ID=merged_data$patient
+merged_data_UAMS=merged_data[,-1]
+write_csv(merged_data_UAMS,"./merged_UAMS_scores.csv")
 ```
 
 ```{r}
