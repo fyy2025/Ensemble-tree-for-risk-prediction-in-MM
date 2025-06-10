@@ -72,7 +72,7 @@ for (i in 1:ncol(scaled_data)){
 ```{r}
 patient=gsub(pattern = "_",replacement = "-",x = patient)
 patient=substr(patient,1,nchar(patient)-2)
-cutoff=quantile(score,0.8)
+cutoff=quantile(score,0.92)
 high_risk=patient[score>=cutoff]
 low_risk=patient[score<cutoff]
 ```
