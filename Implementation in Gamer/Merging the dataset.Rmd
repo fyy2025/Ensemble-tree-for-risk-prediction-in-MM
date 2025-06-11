@@ -80,7 +80,8 @@ merged2=merge(merged,UAMS17_score,by="patient")%>%
 merged_data2=merge(merged2,Gamer_Survival,by="patient")
 patient_ID=merged_data2$patient
 merged_data_Gamer2=merged_data2[,-1]
-# write_csv(merged_data_Gamer2,"./Gamer_7_continuous.csv")
+# write_csv(merged_data_Gamer2,"./merged_Gamer_scores.csv")
+write_csv(merged_data2,"./merged_Gamer_scores_with_patients.csv")
 ```
 
 ```{r}
