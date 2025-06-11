@@ -44,7 +44,7 @@ for (i in 1:ncol(scaled_data)){
 ```
 
 ```{r}
-cutoff=quantile(score,0.9)
+cutoff=quantile(score,0.92)
 high_risk=patient[score>=cutoff]
 low_risk=patient[score<cutoff]
 ```
@@ -54,7 +54,8 @@ low_risk=patient[score<cutoff]
 Read in the survival data and keep only patients with risk categorization.
 ```{r}
 Gamer_Survival=read_csv("./Gamer_Survival.csv")%>%
-  rename(subjid=NumInterne)
+  rename(subjid=NumInterne)%>%
+  subset(group=="Group1")
 Gamer_Survival=subset(Gamer_Survival,subjid %in% high_risk | subjid %in% low_risk)
 Gamer_Survival$risk=ifelse(Gamer_Survival$subjid %in% high_risk, 1, 0) #risk=1 represents high risk
 ```
